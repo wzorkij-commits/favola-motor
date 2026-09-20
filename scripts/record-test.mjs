@@ -187,9 +187,9 @@ await t('clean: ответ-JSON вместо звука считается ош�
   globalThis.fetch = eleven({ headers: { get: () => 'application/json' }, text: async () => '{}' });
   const r = await call('clean', { audio: rec }); assert.equal(r.code, 500); assert.match(r.body.error, /не звук/);
 });
-await t('clean: отказ сервиса виден целиком', async () => {
+await t('clean: отказ сервиса объяснён', async () => {
   globalThis.fetch = eleven({ ok: false, status: 402, text: async () => 'quota exceeded' });
-  const r = await call('clean', { audio: rec }); assert.equal(r.code, 500); assert.match(r.body.error, /402.*quota/);
+  const r = await call('clean', { audio: rec }); assert.equal(r.code, 500); assert.match(r.body.error, /402.*лимит/);
 });
 await t('clean: слишком большая запись и пустая', async () => {
   globalThis.fetch = eleven();
@@ -314,6 +314,19 @@ await t('image: обычный вызов не задет, world/shows/fix по�
   assert.equal(r.code, 200); assert.match(r.body.image, /^data:image\/jpeg;base64,/);
   assert.match(prompt, /Soviet courtyard/); assert.match(prompt, /pigeon loft/); assert.match(prompt, /iron key/);
   assert.equal((await callImg('', {})).code, 400);
+});
+await t('elevenError: нет права у ключа объясняется по-человечески', () => {
+  const body = '{"detail":{"type":"authentication_error","code":"unauthorized","message":"The API key you used is missing the permission speech_to_text to execute this operation.","status":"missing_permissions"}}';
+  const m = R.elevenError('расшифровка', 'Speech to Text', 401, body, 'scribe_v2');
+  assert.match(m, /401/); assert.match(m, /нет права «Speech to Text»/); assert.doesNotMatch(m, /authentication_error/);
+  assert.match(R.elevenError('очистка', 'Audio Isolation', 401, 'nope'), /не принят/);
+  assert.match(R.elevenError('очистка', 'Audio Isolation', 402, 'quota_exceeded'), /лимит/);
+});
+await t('transcribe: отказ по правам ключа возвращает понятную причину', async () => {
+  globalThis.fetch = async () => ({ ok: false, status: 401, text: async () => '{"detail":{"status":"missing_permissions","message":"missing the permission speech_to_text"}}' });
+  const rec = 'data:audio/mpeg;base64,' + Buffer.alloc(3000, 1).toString('base64');
+  const r = await call('transcribe', { audio: rec });
+  assert.equal(r.code, 500); assert.match(r.body.error, /нет права «Speech to Text»/);
 });
 console.log(`\nпройдено ${pass}, провалено ${fail}`);
 process.exit(fail ? 1 : 0);
