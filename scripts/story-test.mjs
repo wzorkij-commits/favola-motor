@@ -236,6 +236,19 @@ r = await call(story, { request: 'x', child: { age: 6 }, constructId: 'open', la
 t('часть b: две части, три вопроса, шесть кадров', r.out.outcome === 'ok' && r.out.draft.panels.length === 2 && r.out.draft.illustration_briefs.length === 6);
 t('часть b видела первую половину', seen[seen.length - 1].body.messages[0].content.includes(first.panels[0].slice(0, 30)));
 
+// модель забыла кадры совсем, вернула три, объект и пустые строки: всё равно ровно шесть
+for (const [name, br] of [['нет вообще', undefined], ['только три', ['а', 'б', 'в']], ['объектом', { a: 'первый кадр', b: 'второй кадр' }], ['пустые строки', ['', ' ', '', '', '', '']]]) {
+  queue = [{ panels: [half('Четыре'), half('Пять')], questions: ['А?', 'Б?', 'В?'], illustration_briefs: br }];
+  r = await call(story, { request: 'x', child: { age: 6 }, constructId: 'open', lang: 'ru', dossier: tr.dossier, part: 'b', first });
+  t('часть b, кадры «' + name + '»: всё равно шесть непустых', r.out.outcome === 'ok' && r.out.draft.illustration_briefs.length === 6 && r.out.draft.illustration_briefs.every(b => typeof b === 'string' && b.trim().length > 3), JSON.stringify(r.out.draft && r.out.draft.illustration_briefs).slice(0, 200));
+}
+queue = [{ panels: [half('Четыре'), half('Пять')], questions: ['А?', 'Б?', 'В?'], illustration_briefs: ['мой кадр 1'] }];
+r = await call(story, { request: 'x', child: { age: 6 }, constructId: 'open', lang: 'ru', dossier: tr.dossier, part: 'b', first });
+t('часть b: кадры модели сохраняются, недостающие достраиваются', r.out.draft.illustration_briefs[0] === 'мой кадр 1' && r.out.draft.illustration_briefs[1].length > 20);
+queue = [{ hero: 'Гоша', title: 'Т', panels: [half('1'), half('2'), half('3'), half('4'), half('5')], questions: ['а', 'б', 'в'] }];
+r = await call(story, { request: 'x', child: { age: 8 }, constructId: 'cupboard', lang: 'ru' });
+t('прежний клиент без кадров: тоже шесть', r.out.outcome === 'ok' && r.out.draft.illustration_briefs.length === 6);
+
 r = await call(story, { request: 'x', child: {}, constructId: 'open', lang: 'ru', dossier: tr.dossier, part: 'b', first: null });
 t('часть b без первой половины: отказ 400', r.code === 400);
 
@@ -265,6 +278,15 @@ const full = { hero: 'Яша', title: 'Пол-медали', panels: SAMPLE.pane
 queue = [{ verdict: 'ok', edits: {}, fixed: [] }];
 r = await call(polish, { draft: full, constructId: 'open', topics: ['losing'], child: { age: 6 }, lang: 'ru', dossier, attempt: 1, maxAttempts: 3 });
 t('редактор: хороший текст остаётся как есть и проходит', r.out.outcome === 'ok' && r.out.story.panels[0] === SAMPLE.panels[0] && r.out.clean, JSON.stringify(r.out).slice(0, 300));
+{
+  const noBr = { ...full }; delete noBr.illustration_briefs;
+  queue = [{ verdict: 'ok', edits: {}, fixed: [] }];
+  const rr = await call(polish, { draft: noBr, constructId: 'open', topics: ['losing'], child: { age: 6 }, lang: 'ru', dossier, attempt: 1, maxAttempts: 3 });
+  t('редактор: черновик без кадров выходит с шестью кадрами', rr.out.outcome === 'ok' && Array.isArray(rr.out.story.illustration_briefs) && rr.out.story.illustration_briefs.length === 6);
+  queue = [{ verdict: 'ok', edits: {}, fixed: [] }];
+  const rb = await call(polish, { draft: { ...noBr, illustration_briefs: 'просто строка' }, constructId: 'open', topics: ['losing'], child: { age: 6 }, lang: 'en', dossier, attempt: 3, maxAttempts: 3 });
+  t('редактор: кадры строкой, последний заход, английский: шесть кадров', rb.out.outcome === 'ok' && rb.out.outcome === 'ok' && rb.out.story.illustration_briefs.length === 6, JSON.stringify(rb.out).slice(0, 300));
+}
 t('редактор: шестая часть вставлена дословно', r.out.story.panels[5] === p6.ru + '\n\n' + CLOSING_RU);
 t('редактор: проверки идут по досье', r.out.check.some(c => c.id === 'handle-present' && c.level === 'pass'));
 
