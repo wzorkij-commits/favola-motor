@@ -16,7 +16,7 @@ const auth = (await import('../api/auth.js')).default;
 let pass = 0, fail = 0;
 async function t(name, fn) {
   try { await fn(); pass++; console.log('ok   ' + name); }
-  catch (e) { fail++; console.log('FAIL ' + name + ' -> ' + (e.message || e).split('\n')[0]); }
+  catch (e) { fail++; console.log('FAIL ' + name + ' -> ' + (e.message || e).split('\n').slice(0,6).join(' | ')); }
 }
 const mkRes = () => { const r = { code: 200, body: null, setHeader() {}, status(c) { r.code = c; return r; },
   json(b) { r.body = b; return r; }, end() { return r; } }; return r; };
@@ -60,7 +60,7 @@ await t('вход по коду: обычный человек безлимит�
   await S.set('fav:otp:mama@example.com', { code: '654321', until: Date.now() + 60000, left: 5, device: 'dev-mama' });
   const r = await post(otp, { device: 'dev-mama', email: 'mama@example.com', code: '654321' });
   assert.equal(r.body.outcome, 'ok'); assert.notEqual(r.body.plan, 'unlimited');
-  const u = await S.loadUser('dev-mama'); u.made = 1; await S.saveUser(u);
+  const u = await S.loadUser('dev-mama'); u.made = 2; await S.saveUser(u);
   const s = await post(spend, { device: 'dev-mama' });
   assert.equal(s.body.ok, false);
 });
@@ -101,6 +101,53 @@ await t('выход не трогает оплату обычного челов
   await S.saveUser(u);
   const r = await post(auth, { device: 'dev-payer', signout: true });
   assert.equal(r.body.plan, 'month'); assert.equal(r.body.stories, 3);
+});
+
+// ── тарифы, две бесплатные сказки, сказка из записи только платно после первой ──
+await t('тарифы: цены и квоты как решил Василий', () => {
+  const P = plans.PLANS;
+  assert.deepEqual([P.month.price, P.month.stories, P.month.days], [9.99, 4, 30]);
+  assert.deepEqual([P.year.price, P.year.stories, P.year.days], [89, 60, 365]);
+  assert.deepEqual([P.unlimited.price, P.unlimited.stories, P.unlimited.days], [199, 365, 365]);
+  assert.equal(plans.FREE_STORIES, 2); assert.equal(plans.RECORD_FREE, 1);
+  const g = plans.grantFor('unlimited', 0); assert.equal(g.stories, 365);
+});
+await t('две бесплатные сказки на аккаунт, третья требует оплаты', async () => {
+  let r = await post(spend, { device: 'dev-free-1' }); assert.equal(r.body.ok, true); assert.equal(r.body.freeLeft, 1);
+  r = await post(spend, { device: 'dev-free-1' }); assert.equal(r.body.ok, true); assert.equal(r.body.freeLeft, 0);
+  r = await post(spend, { device: 'dev-free-1' }); assert.equal(r.body.ok, false); assert.equal(r.body.why, 'expired');
+});
+await t('сказка из записи: первая бесплатна, вторая уже нет, обычная вторая бесплатна', async () => {
+  let r = await post(spend, { device: 'dev-rec-1', kind: 'record' }); assert.equal(r.body.ok, true);
+  r = await post(spend, { device: 'dev-rec-1', kind: 'record' });
+  assert.equal(r.body.ok, false); assert.equal(r.body.why, 'record-paid'); assert.equal(r.body.canRecord, false);
+  r = await post(spend, { device: 'dev-rec-1' }); assert.equal(r.body.ok, true, 'обычная вторая сказка по-прежнему бесплатна');
+  const u = await S.loadUser('dev-rec-1'); assert.equal(u.made, 2);
+});
+await t('после обычной первой сказки запись уже платная', async () => {
+  await post(spend, { device: 'dev-rec-2' });
+  const r = await post(spend, { device: 'dev-rec-2', kind: 'record' });
+  assert.equal(r.body.ok, false); assert.equal(r.body.why, 'record-paid');
+  const u = await S.loadUser('dev-rec-2'); assert.equal(u.made, 1, 'отказ ничего не списывает');
+});
+await t('платный доступ открывает запись и списывает из квоты', async () => {
+  const u = S.blankUser('dev-rec-3'); u.made = 5; u.plan = 'month'; u.stories = 2; u.until = Date.now() + 1e9; await S.saveUser(u);
+  let r = await post(spend, { device: 'dev-rec-3', kind: 'record' });
+  assert.equal(r.body.ok, true); assert.equal(r.body.stories, 1); assert.equal(r.body.canRecord, true);
+  r = await post(spend, { device: 'dev-rec-3', kind: 'record' }); assert.equal(r.body.stories, 0);
+  r = await post(spend, { device: 'dev-rec-3', kind: 'record' }); assert.equal(r.body.ok, false); assert.equal(r.body.why, 'record-paid');
+});
+await t('свободные сказки не открывают запись тому, кто уже собрал первую, даже с оплатой на нуле', async () => {
+  const u = S.blankUser('dev-rec-4'); u.made = 1; u.plan = 'month'; u.stories = 0; u.until = Date.now() + 1e9; await S.saveUser(u);
+  const r = await post(spend, { device: 'dev-rec-4', kind: 'record' });
+  assert.equal(r.body.ok, false);
+});
+await t('canRecord отдаётся в кабинет: новому true, после первой сказки false', async () => {
+  let r = await post(account, { device: 'dev-view-01' }, {}); r = await (async () => { const res = mkRes(); await account({ method: 'GET', query: { device: 'dev-view-01' }, body: {}, url: '/api/account' }, res); return res; })();
+  assert.equal(r.body.canRecord, true);
+  await post(spend, { device: 'dev-view-01' });
+  const res = mkRes(); await account({ method: 'GET', query: { device: 'dev-view-01' }, body: {}, url: '/api/account' }, res);
+  assert.equal(res.body.canRecord, false); assert.equal(res.body.canMake, true);
 });
 console.log(`\n${pass} прошло, ${fail} провалено`);
 process.exit(fail ? 1 : 0);
