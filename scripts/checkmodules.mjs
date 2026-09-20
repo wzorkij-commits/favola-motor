@@ -5,7 +5,7 @@ const files = ['../lib/data.js','../lib/providers.js','../lib/prompts.js','../li
   '../api/ping.js','../api/triage.js','../api/story.js','../api/polish.js','../api/image.js','../api/voice.js','../api/hero.js',
   '../lib/plans.js','../lib/store.js','../lib/sumup.js','../lib/google.js','../api/auth.js','../lib/mail.js','../lib/h-otp.js',
   '../lib/blob.js','../api/stories.js','../lib/h-forget.js',
-  '../api/account.js','../lib/h-spend.js','../api/pay.js','../lib/h-paystatus.js','../lib/route.js','../lib/record.js','../lib/bible.js','../lib/catalog.js','../lib/briefs.js','../lib/recipe.js','../lib/variety.js','../lib/lessons.js','../lib/owner.js'];
+  '../api/account.js','../lib/h-spend.js','../api/pay.js','../lib/h-paystatus.js','../lib/route.js','../lib/record.js','../lib/bible.js','../lib/catalog.js','../lib/briefs.js','../lib/imagecheck.js','../lib/recipe.js','../lib/variety.js','../lib/lessons.js','../lib/owner.js'];
 let bad = 0;
 for (const f of files) {
   try { await import(f); console.log('OK   ' + f.replace('../','')); }

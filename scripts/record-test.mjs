@@ -114,6 +114,51 @@ await t('scenes: модель недоступна -> всё равно соби
   const r = await call('scenes', { sentences: sents, lang: 'en' });
   assert.equal(r.code, 200); assert.equal(r.body.source, 'fallback'); assert.match(r.body.why, /529/);
 });
+await t('scenes: shows, world и кадры доходят до клиента', async () => {
+  globalThis.fetch = claude(JSON.stringify({ title: 'Голубятня', world: 'A small Soviet-era courtyard, summer.', cast: [],
+    scenes: [{ from: 0, to: 2, shows: ['pigeon loft', 'wooden fence', 'pigeon loft', ''], brief: 'A courtyard with a pigeon loft by the fence' },
+             { from: 3, to: 5, shows: ['old man', 'iron key'], brief: 'Old man hands an iron key to a small boy' },
+             { from: 6, to: 8, brief: 'Pigeons rise from the open loft into the sky' }], questions: [] }));
+  const r = await call('scenes', { sentences: sents, lang: 'ru' });
+  assert.equal(r.body.source, 'llm'); assert.equal(r.body.world, 'A small Soviet-era courtyard, summer.');
+  assert.deepEqual(r.body.scenes[0].shows, ['pigeon loft', 'wooden fence'], 'повторы и пустое убраны');
+  assert.deepEqual(r.body.scenes[2].shows, [], 'без списка остаётся пустой, а не падает');
+});
+await t('scenes: нумерация с единицы чинится, кадры модели сохраняются', async () => {
+  globalThis.fetch = claude(JSON.stringify({ title: 'X', cast: [], scenes: [
+    { from: 1, to: 3, brief: 'A quiet yard at dawn' }, { from: 4, to: 6, brief: 'A boy by the fence' }, { from: 7, to: 9, brief: 'Doves in the sky' }] }));
+  const r = await call('scenes', { sentences: sents, lang: 'ru' });
+  assert.equal(r.body.source, 'llm-repaired'); assert.equal(r.body.scenes.length, 3);
+  assert.deepEqual(r.body.scenes.map(x => [x.from, x.to]), [[0, 2], [3, 5], [6, 8]]);
+  assert.match(r.body.scenes[1].brief, /boy by the fence/);
+});
+await t('scenes: дыра и наложение чинятся по началам сцен', async () => {
+  globalThis.fetch = claude(JSON.stringify({ title: 'X', cast: [], scenes: [
+    { from: 0, to: 1, brief: 'A quiet yard at dawn' }, { from: 4, to: 8, brief: 'A boy by the fence' }, { from: 6, to: 8, brief: 'Doves in the sky' }] }));
+  const r = await call('scenes', { sentences: sents, lang: 'ru' });
+  assert.equal(r.body.source, 'llm-repaired');
+  assert.deepEqual(r.body.scenes.map(x => [x.from, x.to]), [[0, 3], [4, 5], [6, 8]]);
+  assert.equal(r.body.scenes.map(x => x.text).join(' '), sents.map(x => x.text).join(' '), 'ни одного слова не потеряно');
+});
+await t('scenes: первый ответ негодный, второй заход с замечанием получается', async () => {
+  let n = 0, seenHint = false;
+  globalThis.fetch = async (url, init) => {
+    n++;
+    const body = JSON.parse(init.body);
+    if (n === 2) seenHint = /could not be read as JSON.*first scene must start at 0/s.test(body.messages[0].content);
+    const text = n === 1 ? 'извините, вот текстом без плана'
+      : JSON.stringify({ title: 'Т', cast: [], scenes: [{ from: 0, to: 2, brief: 'A quiet yard at dawn' }, { from: 3, to: 5, brief: 'A boy by the fence' }, { from: 6, to: 8, brief: 'Doves in the sky' }] });
+    return { ok: true, json: async () => ({ content: [{ text }], stop_reason: 'end_turn' }), text: async () => text };
+  };
+  const r = await call('scenes', { sentences: sents, lang: 'ru' });
+  assert.equal(n, 2); assert.ok(seenHint, 'замечание ушло во второй заход'); assert.equal(r.body.source, 'llm');
+});
+await t('scenes: ключ не подошёл (401) второй заход не тратится', async () => {
+  let n = 0;
+  globalThis.fetch = async () => { n++; return { ok: false, status: 401, text: async () => 'bad key' }; };
+  const r = await call('scenes', { sentences: sents, lang: 'ru' });
+  assert.equal(n, 1); assert.equal(r.body.source, 'fallback');
+});
 await t('scenes: пусто и слишком много', async () => {
   assert.equal((await call('scenes', { sentences: [] })).code, 400);
   assert.equal((await call('scenes', { sentences: S(401) })).code, 400);
@@ -208,5 +253,67 @@ await t('обычный /api/voice не задет: без text отвечает
 await t('GET на адрес записи отвергается', async () => assert.equal((await call('clean', {}, 'GET')).code, 405));
 
 globalThis.fetch = realFetch;
+
+console.log('проверка картинок');
+const image = (await import('../api/image.js')).default;
+const IC = await import('../lib/imagecheck.js');
+const callImg = async (route, body, method = 'POST') => {
+  const res = mkRes();
+  await image({ method, body, query: route ? { __r: route } : {}, url: '/api/' + (route || 'image') }, res);
+  return res;
+};
+const JPEG = 'data:image/jpeg;base64,' + Buffer.alloc(400, 9).toString('base64');
+await t('decide: всё видно -> годится', () => {
+  const d = IC.decide({ found: [true, true, true], text_in_image: false, unsafe: false, contradicts: false, note: '' }, ['a', 'b', 'c']);
+  assert.equal(d.ok, true); assert.equal(d.score, 1); assert.deepEqual(d.missing, []);
+});
+await t('decide: из трёх нельзя терять ничего, из четырёх можно одно', () => {
+  assert.equal(IC.decide({ found: [true, true, false] }, ['a', 'b', 'c']).ok, false);
+  assert.equal(IC.decide({ found: [true, true, true, false] }, ['a', 'b', 'c', 'd']).ok, true);
+  assert.equal(IC.decide({ found: [true, true, false, false] }, ['a', 'b', 'c', 'd']).ok, false);
+});
+await t('decide: текст на картинке, страшное и противоречие бракуют, и это попадает в замечания', () => {
+  const d = IC.decide({ found: [true, true], text_in_image: true, unsafe: true, contradicts: true, note: 'two boys instead of one' }, ['a', 'b']);
+  assert.equal(d.ok, false); assert.ok(d.fix.some(x => /no text/.test(x))); assert.ok(d.fix.some(x => /frightening/.test(x))); assert.ok(d.fix.includes('two boys instead of one'));
+});
+await t('decide: мусор от модели не роняет и считается «не видно»', () => {
+  const d = IC.decide('что-то не то', ['a', 'b']);
+  assert.equal(d.ok, false); assert.deepEqual(d.missing, ['a', 'b']);
+});
+await t('imgcheck: картинка и слова уходят в модель, ответ превращается в решение', async () => {
+  let sent = null;
+  globalThis.fetch = async (url, init) => {
+    sent = JSON.parse(init.body);
+    const text = 'Вот: {"found":[true,false],"text_in_image":false,"unsafe":false,"contradicts":false,"note":"no key"}';
+    return { ok: true, json: async () => ({ content: [{ text }] }), text: async () => text };
+  };
+  const r = await callImg('imgcheck', { image: JPEG, text: 'Дед дал мне ключ.', shows: ['old man', 'iron key'] });
+  assert.equal(r.code, 200); assert.equal(r.body.ok, false); assert.deepEqual(r.body.missing, ['iron key']);
+  const parts = sent.messages[0].content;
+  assert.equal(parts[0].type, 'image'); assert.equal(parts[0].source.media_type, 'image/jpeg');
+  assert.match(parts[1].text, /Дед дал мне ключ/); assert.match(parts[1].text, /1\. old man/); assert.equal(sent.temperature, 0);
+});
+await t('imgcheck: без картинки, без списка и слишком большая картинка отвергаются', async () => {
+  assert.equal((await callImg('imgcheck', { shows: ['a'] })).code, 400);
+  assert.equal((await callImg('imgcheck', { image: JPEG, shows: [] })).code, 400);
+  assert.equal((await callImg('imgcheck', { image: 'data:image/jpeg;base64,' + 'A'.repeat(3_600_000), shows: ['a'] })).code, 413);
+});
+await t('imgcheck: сбой модели отдаёт понятную причину, а не молчит', async () => {
+  globalThis.fetch = async () => ({ ok: false, status: 529, text: async () => 'overloaded' });
+  const r = await callImg('imgcheck', { image: JPEG, text: 'x', shows: ['a'] });
+  assert.equal(r.code, 500); assert.match(r.body.error, /529/); assert.equal(r.body.step, 'imgcheck');
+});
+await t('image: обычный вызов не задет, world/shows/fix попадают в запрос кадра', async () => {
+  process.env.GEMINI_API_KEY = 'g';
+  let prompt = '';
+  globalThis.fetch = async (url, init) => {
+    const b = JSON.parse(init.body); prompt = JSON.stringify(b);
+    return { ok: true, json: async () => ({ output_image: { data: 'QUJD', mime_type: 'image/jpeg' } }), text: async () => '' };
+  };
+  const r = await callImg('', { brief: 'A boy at a fence', cast: 'Boy: small', world: 'Soviet courtyard', shows: ['pigeon loft'], fix: ['iron key'], panel: 2 });
+  assert.equal(r.code, 200); assert.match(r.body.image, /^data:image\/jpeg;base64,/);
+  assert.match(prompt, /Soviet courtyard/); assert.match(prompt, /pigeon loft/); assert.match(prompt, /iron key/);
+  assert.equal((await callImg('', {})).code, 400);
+});
 console.log(`\nпройдено ${pass}, провалено ${fail}`);
 process.exit(fail ? 1 : 0);
