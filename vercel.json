@@ -1,0 +1,37 @@
+{
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/otp",
+      "destination": "/api/auth?__r=otp"
+    },
+    {
+      "source": "/api/spend",
+      "destination": "/api/account?__r=spend"
+    },
+    {
+      "source": "/api/forget",
+      "destination": "/api/account?__r=forget"
+    },
+    {
+      "source": "/api/pay-status",
+      "destination": "/api/pay?__r=pay-status"
+    },
+    {
+      "source": "/api/clean",
+      "destination": "/api/voice?__r=clean"
+    },
+    {
+      "source": "/api/transcribe",
+      "destination": "/api/voice?__r=transcribe"
+    },
+    {
+      "source": "/api/scenes",
+      "destination": "/api/voice?__r=scenes"
+    }
+  ]
+}
