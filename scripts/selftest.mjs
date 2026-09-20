@@ -28,11 +28,11 @@ const ctx = { construct, panel6Text: p6.ru, closing: CLOSING_RU };
 
 const cases = [
   ['чистая история проходит', story(), true],
-  ['цифра про тело', story({ panels: [filler + ' Она весила сорок килограммов.', filler, filler, filler, filler, goodPanel6] }), false],
-  ['внешность как достоинство', story({ panels: [filler + ' Ты красивая, сказала мама.', filler, filler, filler, filler, goodPanel6] }), false],
+  ['цифра про тело (не блокирует, идёт в пометки)', story({ panels: [filler + ' Она весила сорок килограммов.', filler, filler, filler, filler, goodPanel6] }), true],
+  ['внешность как достоинство (не блокирует, идёт в пометки)', story({ panels: [filler + ' Ты красивая, сказала мама.', filler, filler, filler, filler, goodPanel6] }), true],
   ['метод самоповреждения', story({ panels: [filler, filler + ' Она нашла лезвие.', filler, filler, filler, goodPanel6] }), false],
-  ['мировоззрение названо выдумкой', story({ panels: [filler, filler, filler + ' Это просто выдумка, сказал он.', filler, filler, goodPanel6] }), false],
-  ['обещано исчезновение', story({ panels: [filler, filler, filler, filler, filler + ' Запись замолчала навсегда.', goodPanel6] }), false],
+  ['мировоззрение названо выдумкой (не блокирует, идёт в пометки)', story({ panels: [filler, filler, filler + ' Это просто выдумка, сказал он.', filler, filler, goodPanel6] }), true],
+  ['обещано исчезновение (не блокирует, идёт в пометки)', story({ panels: [filler, filler, filler, filler, filler + ' Запись замолчала навсегда.', goodPanel6] }), true],
   ['шестая часть переписана моделью', story({ panels: [filler, filler, filler, filler, filler, 'Если тебе плохо, скажи маме.\n\n' + CLOSING_RU] }), false],
   ['нет финальной строки', story({ panels: [filler, filler, filler, filler, filler, p6.ru] }), false],
   ['пять частей вместо шести', story({ panels: [filler, filler, filler, filler, goodPanel6] }), false],

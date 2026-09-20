@@ -62,9 +62,11 @@ t('образец укладывается в 600–1300 слов', wc >= 600 &&
 const fp = 'Весь двор смеялся, было весело. Пирожок размером с блин. It was the size of a walnut. She had to change her mind. Верёвка качелей скрипела. Толстая ветка.';
 const rfp = checkStory({ lang: 'ru', panels: [fp, '', '', '', '', ''], questions: ['a', 'b', 'c'] }, {});
 t('обычные слова не блокируют историю («весь», «размером», «size of», «change», «верёвка»)',
-  !rfp.hard.some(h => ['body-numbers', 'self-harm-method'].includes(h.id)), JSON.stringify(rfp.hard));
+  !rfp.hard.some(h => ['self-harm-method'].includes(h.id)) && !rfp.soft.some(x => x.id === 'body-targets'), JSON.stringify(rfp.hard));
 const rreal = checkStory({ lang: 'ru', panels: ['Она весит сорок килограммов.', '', '', '', '', ''], questions: ['a', 'b', 'c'] }, {});
-t('настоящая цифра про тело по-прежнему блокируется', rreal.hard.some(h => h.id === 'body-numbers'));
+t('про вес и тело можно говорить: ничего не блокируется', !rreal.hard.some(h => h.id === 'self-harm-method') && !rreal.soft.some(x => x.id === 'body-targets') && !rreal.craft.some(x => x.id === 'appearance-judged'));
+const rdiet = checkStory({ lang: 'ru', panels: ['Ей сказали сесть на диету.', '', '', '', '', ''], questions: ['a', 'b', 'c'] }, {});
+t('диета как цель уходит на вычитку человеку, но не блокирует', rdiet.soft.some(x => x.id === 'body-targets') && !rdiet.hard.some(x => x.id === 'body-targets'));
 const rharm = checkStory({ lang: 'ru', panels: ['Он хотел повеситься.', '', '', '', '', ''], questions: ['a', 'b', 'c'] }, {});
 t('настоящий способ самоповреждения по-прежнему блокируется', rharm.hard.some(h => h.id === 'self-harm-method'));
 
@@ -211,6 +213,11 @@ queue = [{ safety: 'adult', safety_why: 'угроза', topics: [] }];
 r = await call(triage, { request: 'У нас дома иногда страшно, когда папа злой.', child: { age: 6 } });
 t('триаж: модель увидела опасность и показала экран помощи', r.out.outcome === 'disclosure' && r.out.screen.helplines.length > 0);
 
+for (const ok of ['Сын бьёт младшую сестру, когда злится.', 'Её заставляют доедать суп, и она плачет.', 'Брат трогает мои игрушки, ребёнок обижается.', 'Дочь спрашивает, почему она весит больше подруг.', 'Мальчик говорит, что он толстый, и не хочет на физкультуру.']) {
+  queue = [{ ...dossier }];
+  const rr = await call(triage, { request: ok, child: { age: 7 } });
+  t('обычный запрос про тело или драку получает сказку: ' + ok.slice(0, 30), rr.out.outcome === 'ok', rr.out.outcome);
+}
 r = await call(triage, { request: 'у него бьёт отчим', child: { age: 6 } });
 t('триаж: ключевые слова срабатывают до модели', r.out.outcome === 'disclosure' && queue.length === 0);
 
@@ -240,6 +247,14 @@ queue = [{ __stop: 'max_tokens' }];
 r = await call(story, { request: 'x', child: {}, constructId: 'open', lang: 'ru', dossier: tr.dossier, part: 'a' });
 t('обрубленный ответ объявляется отдельно', r.out.outcome === 'retry' && /не успела/.test(r.out.why), JSON.stringify(r.out));
 
+// части списком или объектом (письма, репортаж), нет героя, нет вопросов: чиним, а не отбрасываем
+queue = [{ title: 'Т', panels: [[half('Письмо один'), half('Письмо два')], { a: half('Два'), b: half('Два ещё') }, half('Три')] }];
+r = await call(story, { request: 'x', child: {}, constructId: 'open', lang: 'ru', dossier: tr.dossier, part: 'a' });
+t('часть a: части списком и объектом склеиваются, герой берётся из выбора редактора', r.out.outcome === 'ok' && r.out.draft.panels.every(p => typeof p === 'string' && p.length > 80) && tr.dossier.variety.names.includes(r.out.draft.hero), JSON.stringify(r.out).slice(0, 200));
+queue = [{ panels: [half('Четыре'), half('Пять')] }];
+r = await call(story, { request: 'x', child: {}, constructId: 'open', lang: 'ru', dossier: tr.dossier, part: 'b', first: { hero: 'Гоша', title: 'Т', panels: ['a', 'b', 'c'] } });
+t('часть b: без вопросов тоже принимается, редактор дополнит', r.out.outcome === 'ok' && r.out.draft.questions.length === 0, JSON.stringify(r.out).slice(0, 200));
+
 // без part и без досье: так вызывает прежний клиент
 queue = [{ hero: 'Гоша', title: 'Т', panels: [half('1'), half('2'), half('3'), half('4'), half('5'), half('шестая, лишняя')], questions: ['а', 'б', 'в'], illustration_briefs: [] }];
 r = await call(story, { request: 'ребёнок взял чужое', child: { age: 8 }, constructId: 'cupboard', lang: 'ru' });
@@ -266,7 +281,14 @@ t('редактор: на последнем заходе сказка выхо�
 const harmful = SAMPLE.panels[1] + ' Он хотел повеситься.';
 queue = [{ verdict: 'edit', edits: { '2': harmful }, fixed: [] }];
 r = await call(polish, { draft: full, constructId: 'open', topics: ['losing'], child: { age: 6 }, lang: 'ru', dossier, attempt: 3, maxAttempts: 3 });
-t('редактор: безопасность блокирует даже на последнем заходе', r.out.outcome === 'blocked');
+t('редактор: способ самоповреждения вырезается, сказка всё равно выходит', r.out.outcome === 'ok' && !r.out.story.panels.join(' ').includes('повеситься') && r.out.scrubbed.length === 1 && r.out.story.panels[5].endsWith(CLOSING_RU), JSON.stringify(r.out).slice(0, 300));
+queue = [{ verdict: 'edit', edits: { '2': harmful }, fixed: [] }];
+r = await call(polish, { draft: full, constructId: 'open', topics: ['losing'], child: { age: 6 }, lang: 'ru', dossier, attempt: 1, maxAttempts: 3 });
+t('редактор: на первом заходе то же просит переписать, а не отменяет', r.out.outcome === 'retry' && r.out.craft.some(c => c.id === 'self-harm-method'));
+const bodyTale = SAMPLE.panels[1] + ' Соня весила больше всех в классе, и физрук знал это точно: тридцать шесть килограммов.';
+queue = [{ verdict: 'edit', edits: { '2': bodyTale }, fixed: [] }];
+r = await call(polish, { draft: full, constructId: 'open', topics: ['losing'], child: { age: 6 }, lang: 'ru', dossier, attempt: 3, maxAttempts: 3 });
+t('редактор: слова про вес и килограммы не отменяют сказку', r.out.outcome === 'ok' && r.out.story.panels[1].includes('килограммов'));
 
 queue = [{ panels: full.panels, questions: full.questions }];
 r = await call(polish, { draft: full, constructId: 'open', topics: [], child: { age: 6 }, lang: 'ru', attempt: 1, maxAttempts: 3 });
