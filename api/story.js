@@ -13,6 +13,7 @@ import { cors, generateTextEx, jsonFrom } from '../lib/providers.js';
 import { findConstruct, OPEN_CONSTRUCT } from '../lib/data.js';
 import { buildSystemPrompt, buildStoryPrompt } from '../lib/prompts.js';
 import { allLessons, formatLessons } from '../lib/lessons.js';
+import { ensureBriefs } from '../lib/briefs.js';
 
 const NEED = { a: 3, b: 2, all: 5 };
 
@@ -106,6 +107,11 @@ export default async function handler(req, res) {
       draft.hero = (child && child.heroName) || (names && names[0]) || (lang === 'en' ? 'Kit' : 'Гоша');
     }
     if (part === 'b' && !Array.isArray(draft.questions)) draft.questions = [];
+    // Шесть кадров нужны всегда. Забытые или короткие дополняются из текста частей.
+    if (part !== 'a') {
+      const all = part === 'b' ? [...first.panels, ...draft.panels] : draft.panels;
+      draft.illustration_briefs = ensureBriefs(draft.illustration_briefs, { panels: all, hero: draft.hero || (first && first.hero), lang });
+    }
 
     return res.status(200).json({ outcome: 'ok', part, draft });
   } catch (e) {

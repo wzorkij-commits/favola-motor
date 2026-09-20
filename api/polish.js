@@ -6,6 +6,7 @@ import { cors, generateText, jsonFrom } from '../lib/providers.js';
 import { findConstruct, pickPanel6, CLOSING } from '../lib/data.js';
 import { buildPolishPrompt } from '../lib/prompts.js';
 import { checkStory, findWords, SELF_HARM_METHOD } from '../lib/guardrails.js';
+import { ensureBriefs } from '../lib/briefs.js';
 
 // Запасные вопросы: подставляются, только если редактор вернул меньше трёх.
 // Они общие нарочно — на них взрослый может ответить про себя всегда.
@@ -111,7 +112,7 @@ export default async function handler(req, res) {
         hero: draft.hero, title: draft.title, need: draft.need,
         plot: draft.plot, want: draft.want, symbol: draft.symbol,
         panels: story.panels, questions: story.questions,
-        illustration_briefs: draft.illustration_briefs, lang
+        illustration_briefs: ensureBriefs(draft.illustration_briefs, { panels: fiveParts, hero: draft.hero, lang }), lang
       },
       fixed: edited.fixed || [],
       flags: [...check.hard, ...check.craft],   // что осталось на вычитку человеком
