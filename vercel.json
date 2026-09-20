@@ -32,6 +32,10 @@
     {
       "source": "/api/scenes",
       "destination": "/api/voice?__r=scenes"
+    },
+    {
+      "source": "/api/imgcheck",
+      "destination": "/api/image?__r=imgcheck"
     }
   ]
 }
