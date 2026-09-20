@@ -5,7 +5,7 @@
 import { cors, generateText, jsonFrom } from '../lib/providers.js';
 import { findConstruct, pickPanel6, CLOSING } from '../lib/data.js';
 import { buildPolishPrompt } from '../lib/prompts.js';
-import { checkStory } from '../lib/guardrails.js';
+import { checkStory, findWords, SELF_HARM_METHOD } from '../lib/guardrails.js';
 
 // Запасные вопросы: подставляются, только если редактор вернул меньше трёх.
 // Они общие нарочно — на них взрослый может ответить про себя всегда.
@@ -13,6 +13,15 @@ const SPARE_Q = {
   ru: ['А у тебя такое было?', 'Сколько тебе было тогда?', 'Что ты тогда сделал?'],
   en: ['Did that ever happen to you?', 'How old were you then?', 'What did you do about it?']
 };
+
+// Единственное «жёсткое» правило: способ самоповреждения. Историю из-за него не отменяем:
+// предложение с такой фразой вырезается, остальное выходит.
+function scrubSentences(text, words) {
+  const parts = String(text).split(/(?<=[.!?…»])\s+/);
+  const kept = parts.filter(x => findWords(x, words).length === 0);
+  if (kept.length === parts.length) return text;
+  return kept.length ? kept.join(' ') : parts[0].replace(/\S+/g, (w) => findWords(w, words).length ? '' : w).trim();
+}
 
 export default async function handler(req, res) {
   cors(res);
@@ -70,20 +79,28 @@ export default async function handler(req, res) {
     const questions = source.filter(q => q && String(q).trim()).slice(0, 3);
     while (questions.length < 3) questions.push(SPARE_Q[lang === 'en' ? 'en' : 'ru'][questions.length]);
 
-    const story = { panels, questions, lang };
-    const check = checkStory(story, { construct, panel6Text, closing, hero: draft.hero, dossier });
+    let story = { panels, questions, lang };
+    let check = checkStory(story, { construct, panel6Text, closing, hero: draft.hero, dossier });
+    const scrubbed = [];
 
-    // Безопасность — стена: сюда попадают цифры про тело, способы самоповреждения
-    // и обещание, что проблема исчезнет. Такую историю не показываем никогда.
-    if (check.hard.length) {
-      return res.status(200).json({ outcome: 'blocked', attempt,
-        hard: check.hard, soft: check.soft });
+    // Сказка собирается всегда. Пока есть попытки, редактор получает и «жёсткие», и
+    // ремесленные замечания и переписывает. На последнем заходе фраза со способом
+    // самоповреждения просто вырезается, и история выходит с пометкой.
+    if (last && check.hard.length) {
+      const bad = check.hard.filter(h => h.id === 'self-harm-method');
+      if (bad.length) {
+        const cut = (t) => { const r = scrubSentences(t, SELF_HARM_METHOD); if (r !== t) scrubbed.push(t.slice(0, 60)); return r; };
+        fiveParts = fiveParts.map(cut);
+        for (let i = 0; i < questions.length; i++) questions[i] = cut(questions[i]);
+        story = { panels: [...fiveParts, panel6Text + '\n\n' + closing], questions, lang };
+        check = checkStory(story, { construct, panel6Text, closing, hero: draft.hero, dossier });
+      }
     }
-    // Ремесло — не стена. Пока есть попытки, просим переписать.
-    if (check.craft.length && !last) {
+    if (!last && (check.hard.length || check.craft.length)) {
+      const feed = [...check.hard, ...check.craft];
       // Следующий заход редактора начинается с уже поправленного текста, а не с исходного черновика.
       return res.status(200).json({ outcome: 'retry', attempt,
-        hard: check.craft, craft: check.craft, soft: check.soft,
+        hard: feed, craft: feed, soft: check.soft,
         draft: { ...draft, panels: fiveParts, questions } });
     }
 
@@ -93,11 +110,12 @@ export default async function handler(req, res) {
       story: {
         hero: draft.hero, title: draft.title, need: draft.need,
         plot: draft.plot, want: draft.want, symbol: draft.symbol,
-        panels, questions,
+        panels: story.panels, questions: story.questions,
         illustration_briefs: draft.illustration_briefs, lang
       },
       fixed: edited.fixed || [],
-      flags: check.craft,                       // что осталось на вычитку человеком
+      flags: [...check.hard, ...check.craft],   // что осталось на вычитку человеком
+      scrubbed,
       clean: check.clean,
       panel6: { id: p6.id, clinical_review: p6.clinical_review },
       construct: { id: construct.id, title: construct.title },

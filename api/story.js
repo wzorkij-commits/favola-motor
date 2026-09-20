@@ -16,6 +16,12 @@ import { allLessons, formatLessons } from '../lib/lessons.js';
 
 const NEED = { a: 3, b: 2, all: 5 };
 
+// Некоторые формы рассказа (письма, репортаж, реплики) заставляют модель вернуть часть не строкой,
+// а списком или объектом. Собираем в текст, а не отбрасываем черновик.
+const flat = (p) => Array.isArray(p) ? p.map(flat).filter(Boolean).join('\n\n')
+  : (p && typeof p === 'object') ? Object.values(p).map(flat).filter(Boolean).join('\n\n')
+  : String(p == null ? '' : p);
+
 export default async function handler(req, res) {
   cors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -65,6 +71,11 @@ export default async function handler(req, res) {
       });
     }
 
+    if (Array.isArray(draft.panels)) draft.panels = draft.panels.map(flat);
+    if (Array.isArray(draft.questions)) draft.questions = draft.questions.map(flat).filter(q => q.trim());
+    else if (typeof draft.questions === 'string') draft.questions = draft.questions.split(/\n+/).map(q => q.replace(/^\s*\d+[.)]\s*/, '').trim()).filter(Boolean);
+    if (draft.hero && typeof draft.hero !== 'string') draft.hero = flat(draft.hero);
+
     // Иногда модель пишет и шестую часть, хотя её просили не писать:
     // она приходит из клинической библиотеки. Лишнее просто отрезаем.
     const need = NEED[part];
@@ -88,14 +99,13 @@ export default async function handler(req, res) {
       });
     }
 
-    if (part === 'a') {
-      if (!draft.hero) return res.status(200).json({ outcome: 'retry', why: 'не назван герой', stop: r.stop });
+    // Мелочи, из-за которых раньше выбрасывался целый черновик, теперь чинятся на месте:
+    // нет героя (берём первое имя из выбора редактора), меньше трёх вопросов (редактор дополнит).
+    if (part === 'a' && !draft.hero) {
+      const names = dossier && dossier.variety && dossier.variety.names;
+      draft.hero = (child && child.heroName) || (names && names[0]) || (lang === 'en' ? 'Kit' : 'Гоша');
     }
-    if (part === 'b') {
-      if (!Array.isArray(draft.questions) || draft.questions.length < 3) {
-        return res.status(200).json({ outcome: 'retry', why: 'вопросов меньше трёх', stop: r.stop });
-      }
-    }
+    if (part === 'b' && !Array.isArray(draft.questions)) draft.questions = [];
 
     return res.status(200).json({ outcome: 'ok', part, draft });
   } catch (e) {
