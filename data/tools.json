@@ -1,0 +1,109 @@
+{
+  "_note": "Библиотека инструментов. Инструмент это действие, которое ребёнок может сделать завтра сам, без взрослого и без волшебных предметов: не больше трёх шагов, одна короткая ручка-фраза. Модель выбирает подходящий по ситуации и пересказывает его языком истории. Если ни один не подходит, придумывает свой по тем же критериям (data/tools.json, поле criteria).",
+  "criteria": [
+    "Действие, а не понимание: ребёнок что-то делает руками, ртом, ногами или дыханием.",
+    "Не больше трёх шагов, каждый короче предыдущего.",
+    "Можно сделать завтра, одному, в любом месте.",
+    "У инструмента есть ручка: короткая фраза до двенадцати слов или жест, который ребёнок повторит вслух.",
+    "Инструмент не обещает, что проблема исчезнет. Он меняет расстояние до неё или следующий шаг.",
+    "В истории он срабатывает наполовину: этого хватает, чтобы ребёнок поверил, и не хватает, чтобы стало нечестно."
+  ],
+  "tools": [
+    {
+      "id": "pause-breath",
+      "ru": {"name": "Пауза и три выдоха", "how": "Сказать «я на минутку», отойти в тихое место, три медленных выдоха, как на горячий чай. Потом решить самому, вернуться сейчас или позже.", "handle": "Я на минутку."},
+      "en": {"name": "A pause and three slow breaths", "how": "Say 'I need a minute', step somewhere quiet, three slow breaths as if cooling hot tea. Then decide yourself whether to go back now or later.", "handle": "I need a minute."},
+      "fits": ["anger", "losing", "crying", "overwhelm", "fights", "hitting", "shame", "cannot-stop"], "ages": [4, 12]
+    },
+    {
+      "id": "name-it-out-loud",
+      "ru": {"name": "Сказать одно предложение", "how": "Найти одного человека и сказать ему одно готовое предложение про своё. Не рассказывать всё, только начать.", "handle": "Мне надо тебе кое-что сказать."},
+      "en": {"name": "One sentence out loud", "how": "Pick one person and say one ready sentence about it. Not the whole story, only the start.", "handle": "I need to tell you something."},
+      "fits": ["secrets", "lying", "guilt", "took-something", "fear", "worry", "not-telling"], "ages": [5, 12]
+    },
+    {
+      "id": "real-size",
+      "ru": {"name": "Замерить по-настоящему", "how": "Придумать мерку (от одного до пяти, ладонь, линейка) и честно измерить: как велика беда сейчас. Потом ещё раз через десять минут.", "handle": "Сколько это на самом деле? Замерю."},
+      "en": {"name": "Measure it for real", "how": "Make up a measure (one to five, a hand-span, a ruler) and honestly measure how big the trouble is now. Then again in ten minutes.", "handle": "How big is it really? I'll measure."},
+      "fits": ["worry", "night-fears", "fear", "self-worth", "not-good-enough", "school", "mistakes"], "ages": [6, 12]
+    },
+    {
+      "id": "park-till-morning",
+      "ru": {"name": "Отложить на утро", "how": "Сказать про заботу вслух или нарисовать её, положить в определённое место (конверт, ящик, под подушку) и сказать, что займёмся завтра. Утром достать и посмотреть, какая она на свету.", "handle": "Это до утра."},
+      "en": {"name": "Park it till morning", "how": "Say the worry aloud or draw it, put it in a chosen place (an envelope, a drawer, under the pillow) and say we will deal with it tomorrow. In the morning take it out and see what it looks like in daylight.", "handle": "This is for the morning."},
+      "fits": ["night-fears", "worry", "sleep", "unanswered", "big-questions", "fear", "school"], "ages": [4, 10]
+    },
+    {
+      "id": "tiny-first-step",
+      "ru": {"name": "Крошечный первый шаг", "how": "Разбить страшное на ступеньки. Первая ступенька такая мелкая, что смешно: подойти и постоять рядом. Сделать только её.", "handle": "Только первая ступенька."},
+      "en": {"name": "A tiny first step", "how": "Break the scary thing into stairs. The first stair is so small it is funny: walk up and stand nearby. Do only that one.", "handle": "Just the first stair."},
+      "fits": ["refuses-to-try", "refuses-school", "fear", "shyness", "new-place", "not-good-enough", "kindergarten", "dog", "dark"], "ages": [4, 12]
+    },
+    {
+      "id": "ask-with-a-script",
+      "ru": {"name": "Попросить готовыми словами", "how": "Заранее знать точные слова просьбы о помощи, из трёх-пяти слов. Сказать их, даже если голос дрожит.", "handle": "Мне нужна помощь. Можно?"},
+      "en": {"name": "Ask with ready words", "how": "Know the exact words of the request in advance, three to five of them. Say them even if the voice wobbles.", "handle": "I need help. Can you?"},
+      "fits": ["exclusion", "not-invited", "left-out", "friendship", "bullying", "teasing", "loneliness", "school"], "ages": [5, 12]
+    },
+    {
+      "id": "notice-and-count",
+      "ru": {"name": "Заметить и посчитать", "how": "Когда внутри включается одно и то же, считать, сколько раз и в каком порядке. Записать. Повторяющееся видно как механизм, а не как правда.", "handle": "Раз. Опять то же самое."},
+      "en": {"name": "Notice and count", "how": "When the same thing switches on inside, count how many times and in what order. Write it down. What repeats looks like a mechanism, not the truth.", "handle": "One. The same thing again."},
+      "fits": ["inner-critic", "self-worth", "not-good-enough", "shame", "worry", "perfectionism"], "ages": [7, 12]
+    },
+    {
+      "id": "say-no-shape",
+      "ru": {"name": "Сказать «нет» по-своему", "how": "Выбрать короткое «нет», которое можно сказать спокойно (без объяснений и без крика), и стоять на нём ровно один раз.", "handle": "Нет, я не хочу."},
+      "en": {"name": "Say no your own way", "how": "Pick a short no that can be said calmly, without explaining and without shouting, and stand on it exactly once.", "handle": "No, I don't want to."},
+      "fits": ["cannot-say-no", "coercion", "sharing", "friendship", "bullying", "pressure", "hugs"], "ages": [5, 12]
+    },
+    {
+      "id": "leave-and-return",
+      "ru": {"name": "Отойти и вернуться", "how": "Выбрать место, куда можно уйти на пять минут, и сигнал, что ты вернёшься. Вернуться самому, когда пять минут кончатся.", "handle": "Пять минут и вернусь."},
+      "en": {"name": "Step away and come back", "how": "Pick a place you may go for five minutes and a signal that you will be back. Come back yourself when the five minutes are up.", "handle": "Five minutes and I'm back."},
+      "fits": ["anger", "sibling", "jealousy", "fights", "overwhelm", "new-baby", "crying"], "ages": [4, 12]
+    },
+    {
+      "id": "put-it-right",
+      "ru": {"name": "Поправить делом", "how": "Найти одно маленькое действие, которое исправляет случившееся хоть на чуть-чуть: вернуть, починить, подложить, сказать «я нечаянно». Сделать его тихо.", "handle": "Что можно поправить?"},
+      "en": {"name": "Put it right with a deed", "how": "Find one small action that mends what happened even a little: return, fix, replace, say 'I did not mean to'. Do it quietly.", "handle": "What can I put right?"},
+      "fits": ["stealing", "took-something", "hurt-someone", "broke-something", "lying", "guilt", "hitting"], "ages": [5, 12]
+    },
+    {
+      "id": "check-the-story",
+      "ru": {"name": "Проверить догадку", "how": "Заметить, что ты придумал, что думают другие, и спросить у них или посмотреть, что видно на самом деле. Догадка и правда часто расходятся.", "handle": "Это я придумал или так и есть?"},
+      "en": {"name": "Check the guess", "how": "Notice that you made up what others think, and ask them or look at what is really there. The guess and the truth often differ.", "handle": "Did I make that up, or is it real?"},
+      "fits": ["shame", "being-stared-at", "exclusion", "friendship", "worry", "school", "self-worth", "teasing"], "ages": [7, 12]
+    },
+    {
+      "id": "anchor",
+      "ru": {"name": "Опора", "how": "Найти вещь, место или человека, рядом с которыми легче, и знать их заранее. Когда трудно, идти к ним или взять вещь в руку.", "handle": "Мой камушек со мной."},
+      "en": {"name": "An anchor", "how": "Find a thing, a place or a person that makes it easier, and know them in advance. When it is hard, go to them or hold the thing.", "handle": "My pebble is with me."},
+      "fits": ["night-fears", "kindergarten", "new-place", "separation", "fear", "shyness", "school", "dark"], "ages": [3, 9]
+    },
+    {
+      "id": "friend-view",
+      "ru": {"name": "Как про друга", "how": "Представить, что это случилось не с тобой, а с лучшим другом. Что бы ты ему сказал? Сказать это себе теми же словами.", "handle": "А что бы я сказал другу?"},
+      "en": {"name": "As if it were a friend", "how": "Imagine it happened to your best friend, not you. What would you tell him? Say it to yourself in the same words.", "handle": "What would I tell a friend?"},
+      "fits": ["self-worth", "inner-critic", "shame", "mistakes", "not-good-enough", "losing", "perfectionism", "hides-from-camera"], "ages": [6, 12]
+    },
+    {
+      "id": "wave",
+      "ru": {"name": "Волна проходит", "how": "Знать, что сильное чувство приходит волной: поднимается, стоит на верху и опускается. Сидеть на берегу и ждать, пока волна пройдёт, не разговаривая с ней.", "handle": "Это волна. Она пройдёт."},
+      "en": {"name": "The wave passes", "how": "Know that a strong feeling comes like a wave: it rises, stands at the top and goes down. Sit on the shore and wait for it to pass, without arguing with it.", "handle": "It's a wave. It will pass."},
+      "fits": ["anger", "crying", "overwhelm", "losing", "jealousy", "night-fears", "fights", "cannot-stop"], "ages": [6, 12]
+    },
+    {
+      "id": "agree-a-signal",
+      "ru": {"name": "Договориться о знаке", "how": "Заранее договориться со взрослым о тайном знаке (жест, слово, картинка), который значит «мне трудно, забери меня или помоги». Взрослый придёт без вопросов.", "handle": "Показываю ухо: мне пора."},
+      "en": {"name": "Agree on a signal", "how": "Agree in advance with a grown-up on a secret signal (a gesture, a word, a picture) that means 'it is hard for me, come and get me'. The grown-up comes without questions.", "handle": "I touch my ear: it's time."},
+      "fits": ["new-place", "shyness", "party", "school", "kindergarten", "coercion", "sleepover", "separation"], "ages": [5, 12]
+    },
+    {
+      "id": "swap-the-question",
+      "ru": {"name": "Поменять вопрос", "how": "Когда крутится «а вдруг», заменить его вопросом, на который можно ответить действием: что я могу сделать прямо сейчас за одну минуту?", "handle": "Что я могу за минуту?"},
+      "en": {"name": "Swap the question", "how": "When 'what if' keeps spinning, swap it for a question that has an action for an answer: what can I do right now in one minute?", "handle": "What can I do in a minute?"},
+      "fits": ["worry", "fear", "night-fears", "school", "mistakes", "perfectionism", "big-questions"], "ages": [7, 12]
+    }
+  ]
+}
