@@ -36,6 +36,10 @@
     {
       "source": "/api/imgcheck",
       "destination": "/api/image?__r=imgcheck"
+    },
+    {
+      "source": "/api/admin",
+      "destination": "/api/account?__r=admin"
     }
   ]
 }
