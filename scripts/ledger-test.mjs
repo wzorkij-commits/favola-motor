@@ -17,7 +17,11 @@ globalThis.fetch = async (url, opts) => {
   if (u.includes('generativelanguage.googleapis.com')) {
     return new Response(JSON.stringify({ output_image: { mime_type: 'image/jpeg', data: 'AAAA' } }), { status: 200 });
   }
-  if (u.includes('text-to-speech')) return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+  if (u.includes('text-to-speech')) return new Response(JSON.stringify({
+    audio_base64: Buffer.from([1, 2, 3]).toString('base64'),
+    alignment: { characters: ['a', 'b', 'c'],
+      character_start_times_seconds: [0, 0.1, 0.2], character_end_times_seconds: [0.1, 0.2, 0.3] }
+  }), { status: 200 });
   if (u.includes('/v1/user/subscription')) return new Response('{}', { status: 401 });
   return realFetch(url, opts);
 };
