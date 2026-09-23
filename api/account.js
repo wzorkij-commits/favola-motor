@@ -12,6 +12,7 @@ import { GOOGLE_READY, clientId } from '../lib/google.js';
 import { asked } from '../lib/route.js';
 import forget from '../lib/h-forget.js';
 import spend from '../lib/h-spend.js';
+import admin from '../lib/h-admin.js';
 
 const okId = id => typeof id === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(id);
 const okMail = m => typeof m === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(m.trim());
@@ -21,6 +22,7 @@ export default async function handler(req, res) {
   const r = asked(req);
   if (r === 'spend')  return spend(req, res);
   if (r === 'forget') return forget(req, res);
+  if (r === 'admin')  return admin(req, res);
 
   cors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
