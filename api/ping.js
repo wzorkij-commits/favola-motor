@@ -29,12 +29,13 @@ export default async function handler(req, res) {
     const voiceId = process.env.ELEVENLABS_VOICE_RU;
     if (!voiceId) return res.status(200).json({ test: 'voice', ok: false, ошибка: 'ELEVENLABS_VOICE_RU не задан' });
     try {
-      const audio = await generateVoice({ text: 'Проверка.', voiceId, settings: VOICE_SETTINGS });
+      const { audio, sync } = await generateVoice({ text: 'Проверка.', voiceId, settings: VOICE_SETTINGS });
       return res.status(200).json({
         test: 'voice', ok: true,
         итог: 'ОЗВУЧКА РАБОТАЕТ',
         voice_id: voiceId,
-        размер_записи_байт: Math.round(audio.length * 0.75)
+        размер_записи_байт: Math.round(audio.length * 0.75),
+        метки_слов: sync ? 'есть' : 'нет'
       });
     } catch (e) {
       return res.status(200).json({

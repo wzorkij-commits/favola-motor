@@ -27,8 +27,8 @@ export default async function handler(req, res) {
       : process.env.ELEVENLABS_VOICE_RU;
     if (!voiceId) return res.status(500).json({ error: 'voice id not configured' });
 
-    const audio = await generateVoice({ text, voiceId, settings: VOICE_SETTINGS });
-    return res.status(200).json({ part, audio });
+    const { audio, sync } = await generateVoice({ text, voiceId, settings: VOICE_SETTINGS });
+    return res.status(200).json({ part, audio, sync });
   } catch (e) {
     return res.status(500).json({ error: String(e.message || e), part: req.body?.part });
   }
