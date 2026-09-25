@@ -10,6 +10,7 @@
     "check": "node scripts/checkmodules.mjs && node scripts/selftest.mjs && node scripts/owner-test.mjs && node scripts/record-test.mjs && node scripts/story-test.mjs && node scripts/ledger-test.mjs"
   },
   "dependencies": {
-    "@vercel/blob": "^2.0.0"
+    "@vercel/blob": "^2.0.0",
+    "eyo-kernel": "^4.1.3"
   }
 }
