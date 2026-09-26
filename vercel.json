@@ -5,41 +5,13 @@
     }
   },
   "rewrites": [
-    {
-      "source": "/api/otp",
-      "destination": "/api/auth?__r=otp"
-    },
-    {
-      "source": "/api/spend",
-      "destination": "/api/account?__r=spend"
-    },
-    {
-      "source": "/api/forget",
-      "destination": "/api/account?__r=forget"
-    },
-    {
-      "source": "/api/pay-status",
-      "destination": "/api/pay?__r=pay-status"
-    },
-    {
-      "source": "/api/clean",
-      "destination": "/api/voice?__r=clean"
-    },
-    {
-      "source": "/api/transcribe",
-      "destination": "/api/voice?__r=transcribe"
-    },
-    {
-      "source": "/api/scenes",
-      "destination": "/api/voice?__r=scenes"
-    },
-    {
-      "source": "/api/imgcheck",
-      "destination": "/api/image?__r=imgcheck"
-    },
-    {
-      "source": "/api/admin",
-      "destination": "/api/account?__r=admin"
-    }
+    { "source": "/api/otp", "destination": "/api/auth?__r=otp" },
+    { "source": "/api/spend", "destination": "/api/account?__r=spend" },
+    { "source": "/api/forget", "destination": "/api/account?__r=forget" },
+    { "source": "/api/pay-status", "destination": "/api/pay?__r=pay-status" },
+    { "source": "/api/clean", "destination": "/api/record?__r=clean" },
+    { "source": "/api/transcribe", "destination": "/api/record?__r=transcribe" },
+    { "source": "/api/scenes", "destination": "/api/record?__r=scenes" },
+    { "source": "/api/polish", "destination": "/api/record?__r=polish" }
   ]
 }

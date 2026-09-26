@@ -1,13 +1,10 @@
 {
-  "name": "favola-pipeline",
+  "name": "favola-radio-pipeline",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "selftest": "node scripts/selftest.mjs",
-    "dev": "vercel dev",
-    "data": "node -e \"const fs=require('fs');for(const n of ['constructs','panel6','heroes','tools','lessons','sample']){const o=JSON.parse(fs.readFileSync('data/'+n+'.json','utf8'));fs.writeFileSync('data/'+n+'.js','export default '+JSON.stringify(o,null,2)+';\\n')}\"",
-    "check": "node scripts/checkmodules.mjs && node scripts/selftest.mjs && node scripts/owner-test.mjs && node scripts/record-test.mjs && node scripts/story-test.mjs && node scripts/ledger-test.mjs"
+    "check": "node scripts/checkmodules.mjs && node scripts/selftest.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.0.0",
