@@ -38,6 +38,13 @@ def api(route):
             return J({'outcome':'ok', 'email': STATE['email'], 'made':0, 'canMake':True})
         return J({'outcome':'sent', 'minutes':15})
     if path == 'account': return J({'email': STATE['email'],'made':0,'canMake':True,'canRecord':True,'freeLeft':2,'radioShelf':[]})
+    if path == 'spend': return J({'ok': STATE.get('spend_ok', True), 'made': 1, 'canMake': STATE.get('spend_ok', True), 'canRecord': STATE.get('spend_ok', True), 'why': 'free' if STATE.get('spend_ok', True) else 'empty'})
+    if path == 'align':
+        n = len(body.get('weights') or [])
+        return J({'scenes': [{'from': i, 'to': i, 'start': i, 'end': i+1} for i in range(n)]})
+    if path == 'pay':
+        return J({'outcome': 'ok', 'url': 'http://127.0.0.1:%d/paid.html?ref=x' % PORT, 'ref': 'x', 'checkout': 'c1', 'amount': 9.99, 'currency': 'EUR'})
+    if path == 'pay-status': return J({'paid': True, 'made': 0, 'canMake': True})
     if path == 'auth' and m == 'POST': return J({'вошёл': False})
     if path == 'library' and m == 'GET':
         if qs.get('id'):
@@ -58,7 +65,8 @@ def api(route):
     if path == 'transcribe':
         return J({'language':'ru','text':'Раз. Два. Три.',
                    'sentences':[{'i':0,'text':'Раз.','start':0,'end':1},{'i':1,'text':'Два.','start':1,'end':2},{'i':2,'text':'Три.','start':2,'end':3}],
-                   'duration':3})
+                   'words':[{'t':'Раз.','s':0,'e':0.9},{'t':'Два.','s':1,'e':1.9},{'t':'Три.','s':2,'e':2.9}],
+                   'pauses':[], 'duration':3})
     if path == 'polish': return J({'sentences': ['Раз, чистый.','Два, чистый.','Три, чистый.'], 'source':'llm'})
     if path == 'scenes':
         return J({'title':'Записанная сказка','world':'дом','castText':'Ася: девочка',
@@ -131,6 +139,12 @@ cur = lambda: page.evaluate("()=>{const s=document.querySelector('.screen[data-a
 
 print('заставка и вход')
 check('заставка активна при загрузке', cur() == 'intro', cur())
+check('на заставке видны звёзды', page.locator('.sky .star').count() > 0)
+check('кнопка ночного режима на месте', page.is_visible('#themeToggle'))
+page.click('#themeToggle'); page.wait_for_timeout(100)
+check('ночной режим включился', page.evaluate("()=>document.documentElement.getAttribute('data-theme')") == 'night')
+page.click('#themeToggle'); page.wait_for_timeout(100)
+check('ночной режим выключился обратно', page.evaluate("()=>document.documentElement.getAttribute('data-theme')") == 'day')
 page.click('.langpick button[data-lang=ru]'); page.wait_for_timeout(400)
 check('после выбора языка — экран входа (почта настроена, аккаунт без email)', cur() == 'signin', cur())
 page.fill('#email', 'roditel@example.com'); page.click('#sendCode'); page.wait_for_timeout(300)
@@ -140,6 +154,9 @@ check('после верного кода — развилка', cur() == 'hub',
 
 print('запись голосом')
 page.click('#goRecord'); page.wait_for_timeout(200)
+check('сначала — выбор стиля картинок', cur() == 'style', cur())
+check('в списке стилей четыре варианта', page.locator('.stylecard').count() == 4)
+page.click('.stylecard >> nth=0'); page.wait_for_timeout(150)
 check('экран записи открылся', cur() == 'record', cur())
 page.click('#recStart'); page.wait_for_timeout(200)
 check('пошла запись — идёт таймер', page.is_visible('#recLive'))
@@ -158,7 +175,9 @@ check('в списке есть хотя бы одна сказка', page.locat
 page.click('#libGrid .book >> nth=0'); page.wait_for_timeout(300)
 check('открылся телесуфлёр', cur() == 'telep', cur())
 check('текст сказки показан', 'Абзац один' in page.inner_text('#tpText'))
-check('запись голоса пошла сама, пока читаем с телесуфлёра', not page.is_hidden('#tpRecIndicator'))
+check('запись не идёт сама — видна кнопка «Записать»', page.is_visible('#tpRecordBtn') and page.is_hidden('#tpRecIndicator'))
+page.click('#tpRecordBtn'); page.wait_for_timeout(200)
+check('после нажатия «Записать» — пошла запись', page.is_hidden('#tpRecordBtn') and not page.is_hidden('#tpRecIndicator'))
 before = page.inner_text('#tpText')
 page.click('#tpSizeUp'); page.wait_for_timeout(100)
 check('кнопка размера меняет размер шрифта', page.evaluate("()=>document.getElementById('tpText').style.fontSize") == '24px')
@@ -174,7 +193,11 @@ page.click('#pgNext'); page.wait_for_timeout(150)
 check('дошли до конца книги, следующая — вопросы для взрослого', cur() == 'story', cur())
 page.click('#pgNext'); page.wait_for_timeout(150)
 check('экран вопросов открылся', cur() == 'parent', cur())
-check('три вопроса показаны', page.locator('#parentQ li').count() == 3)
+check('вопрос показан один за раз, как игра', page.is_visible('#qCard') and page.inner_text('#qCard') != '')
+for i in range(8):
+    if page.is_visible('#saveStory'): break
+    page.click('#qNext'); page.wait_for_timeout(100)
+check('после всех вопросов — закрывающая строка и кнопка сохранения', page.is_visible('#saveStory'))
 check('закрывающая строка на месте', 'спроси у того' in page.inner_text('#closingLine'))
 page.click('#saveStory'); page.wait_for_timeout(300)
 check('кнопка сохранения сработала без ошибок', 'Сохранено' in page.inner_text('#saveStory'))
@@ -183,6 +206,8 @@ print('конструктор «Придумать вместе»')
 page.click('.screen[data-active] [data-home]'); page.wait_for_timeout(200)
 check('«Меню» вернуло на развилку', cur() == 'hub', cur())
 page.click('#goWizard'); page.wait_for_timeout(200)
+check('сначала — выбор стиля картинок (конструктор)', cur() == 'style', cur())
+page.click('.stylecard >> nth=1'); page.wait_for_timeout(150)
 check('конструктор открылся на первом вопросе', cur() == 'wizard', cur())
 page.fill('.wizstep input', 'Ася'); page.wait_for_timeout(100)
 page.click('#wizNext'); page.wait_for_timeout(200)
@@ -211,6 +236,14 @@ page.click('.screen[data-active] [data-home]'); page.wait_for_timeout(150)
 page.click('#hubCab'); page.wait_for_timeout(300)
 check('кабинет открылся', cur() == 'cabinet', cur())
 check('почта показана', 'roditel@example.com' in page.inner_text('#cabWho'))
+
+print('тарифы: после бесплатной сказки — оплата')
+page.click('.screen[data-active] [data-home]'); page.wait_for_timeout(150)
+STATE['spend_ok'] = False
+page.click('#goWizard'); page.wait_for_timeout(300)
+check('без права на бесплатную сказку — экран тарифов, а не конструктор', cur() == 'paywall', cur())
+check('на экране тарифов виден пакет из 10 сказок', '10' in page.inner_text('.screen[data-active]'))
+STATE['spend_ok'] = True
 
 check('за весь прогон ни одной ошибки в консоли', not errs, errs)
 

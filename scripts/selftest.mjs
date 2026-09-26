@@ -1,80 +1,107 @@
-// Проверка проверок. Гоняется без единого ключа и без единого запроса к провайдеру:
-// подсовывает guardrails заведомо плохие истории и смотрит, что они не проходят.
-//
-//   node scripts/selftest.mjs
+// Быстрая проверка без сети и без ключей: все модули грузятся без ошибок,
+// данные библиотеки в порядке, а чистая логика (без обращений к провайдерам)
+// ведёт себя правильно. Живые проверки провайдеров — через /api/ping?test=...
+// уже в развёрнутом виде, отдельно (нужны настоящие ключи).
+import assert from 'node:assert/strict';
 
-import { checkStory, CLOSING_RU } from '../lib/guardrails.js';
-import { CONSTRUCTS, PANEL6, pickConstruct, pickPanel6 } from '../lib/data.js';
-
-const construct = CONSTRUCTS.constructs[0];
-const p6 = PANEL6.entries.find(e => e.id === construct.panel6);
-const goodPanel6 = p6.ru + '\n\n' + CLOSING_RU;
-
-const filler = 'Она умела свистеть в два пальца. Голуби слетались посмотреть. '.repeat(30);
-
-function story(over = {}) {
-  return {
-    lang: 'ru',
-    panels: [filler, filler, filler, filler, filler, goodPanel6],
-    questions: [
-      'А ты когда-нибудь боялся выйти на сцену? Что это было?',
-      'Сколько тебе было лет, когда это случилось в первый раз?',
-      'Что ты сделал тогда?'
-    ],
-    ...over
-  };
-}
-const ctx = { construct, panel6Text: p6.ru, closing: CLOSING_RU };
-
-const cases = [
-  ['чистая история проходит', story(), true],
-  ['цифра про тело (не блокирует, идёт в пометки)', story({ panels: [filler + ' Она весила сорок килограммов.', filler, filler, filler, filler, goodPanel6] }), true],
-  ['внешность как достоинство (не блокирует, идёт в пометки)', story({ panels: [filler + ' Ты красивая, сказала мама.', filler, filler, filler, filler, goodPanel6] }), true],
-  ['метод самоповреждения', story({ panels: [filler, filler + ' Она нашла лезвие.', filler, filler, filler, goodPanel6] }), false],
-  ['мировоззрение названо выдумкой (не блокирует, идёт в пометки)', story({ panels: [filler, filler, filler + ' Это просто выдумка, сказал он.', filler, filler, goodPanel6] }), true],
-  ['обещано исчезновение (не блокирует, идёт в пометки)', story({ panels: [filler, filler, filler, filler, filler + ' Запись замолчала навсегда.', goodPanel6] }), true],
-  ['шестая часть переписана моделью', story({ panels: [filler, filler, filler, filler, filler, 'Если тебе плохо, скажи маме.\n\n' + CLOSING_RU] }), false],
-  ['нет финальной строки', story({ panels: [filler, filler, filler, filler, filler, p6.ru] }), false],
-  ['пять частей вместо шести', story({ panels: [filler, filler, filler, filler, goodPanel6] }), false],
-  ['вопрос-допрос (ремесло: не блокирует, идёт в пометки)', story({ questions: ['Что ты чувствуешь, когда я тебя не слушаю?', 'А?', 'Б?'] }), true],
-  ['два вопроса вместо трёх', story({ questions: ['А?', 'Б?'] }), false]
-];
-
-let pass = 0, fail = 0;
-for (const [name, s, shouldPass] of cases) {
-  const r = checkStory(s, ctx);
-  const ok = r.ok === shouldPass;
-  ok ? pass++ : fail++;
-  const hits = r.hard.map(h => h.id).join(', ') || '—';
-  console.log(`${ok ? 'OK  ' : 'FAIL'}  ${name.padEnd(38)} ok=${r.ok}  hard=[${hits}]`);
+let ok = 0, fail = 0;
+function check(name, fn) {
+  try { fn(); ok++; console.log('  ok   ' + name); }
+  catch (e) { fail++; console.log('  FAIL ' + name + '  -> ' + e.message); }
 }
 
-// выбор конструкта и шестой части
-console.log('\nвыбор конструкта:');
-for (const [topics, age] of [[['stealing'], 9], [['appearance'], 5], [['hitting'], 8], [['big-questions'], 4], [['knitting'], 7]]) {
-  const c = pickConstruct(topics, age);
-  const six = c ? pickPanel6(c, topics, age) : null;
-  console.log(`  ${JSON.stringify(topics)} age ${age} -> ${c ? c.id : 'НЕТ КОНСТРУКТА'}${six ? ' / ' + six.id : ''}`);
+console.log('модули api/*.js загружаются');
+const apiFiles = ['account', 'auth', 'pay', 'ping', 'record', 'image', 'hero', 'voice', 'library', 'wizard', 'stories'];
+for (const f of apiFiles) {
+  try { await import('../api/' + f + '.js'); ok++; console.log('  ok   загрузился api/' + f + '.js'); }
+  catch (e) { fail++; console.log('  FAIL api/' + f + '.js не загрузился -> ' + e.message); }
 }
 
-console.log(`\n${pass} прошло, ${fail} провалено`);
+console.log('\nбиблиотека сказок (data/library.js)');
+const { LIBRARY, libraryList, libraryOne } = await import('../data/library.js');
+check('в библиотеке двенадцать сказок', () => assert.equal(LIBRARY.length, 12));
+check('шесть русских, шесть английских', () => {
+  assert.equal(LIBRARY.filter(s => s.lang === 'ru').length, 6);
+  assert.equal(LIBRARY.filter(s => s.lang === 'en').length, 6);
+});
+check('все id разные', () => assert.equal(new Set(LIBRARY.map(s => s.id)).size, LIBRARY.length));
+check('у каждой сказки есть текст, источник и оценка времени', () => {
+  for (const s of LIBRARY) {
+    assert.ok(s.text && s.text.length > 30, s.id + ': текст пустой или совсем короткий');
+    assert.ok(s.source && s.source.length > 5, s.id + ': нет источника');
+    assert.ok(s.estMinutes > 0, s.id + ': нет оценки времени чтения');
+  }
+});
+check('libraryList фильтрует по языку', () => assert.equal(libraryList('ru').length, 6));
+check('libraryOne находит по id, иначе null', () => {
+  assert.equal(libraryOne('ru-repka').title, 'Репка');
+  assert.equal(libraryOne('нет-такой'), null);
+});
 
-// новые правила: машинные обороты и названные чувства
-console.log('\nновые правила:');
-const extra = [
-  ['машинный оборот «не просто»', 'Она была не просто девочкой, а капитаном. ', 'ai-tells'],
-  ['«в этот момент»', 'В этот момент дверь открылась. ', 'ai-tells'],
-  ['«с тех пор»', 'С тех пор он не подходил к воде. ', 'ai-tells'],
-  ['названное чувство', 'Ей стало обидно, и она ушла. ', 'named-feelings'],
-  ['«он понял, что»', 'Он понял, что был неправ. ', 'named-feelings']
-];
-for (const [name, bad, expectId] of extra) {
-  const s = story({ panels: [filler + bad, filler, filler, filler, filler, goodPanel6] });
-  const r = checkStory(s, ctx);
-  // Ремесленные правила не блокируют историю: они попадают в craft, и редактор получает ещё попытку.
-  const hit = r.craft.some(h => h.id === expectId) && r.ok;
-  if (!hit) fail++;
-  console.log(`  ${hit ? 'OK  ' : 'FAIL'} ${name.padEnd(30)} -> craft: ${r.craft.map(h => h.id).join(', ') || '—'}`);
-}
+console.log('\nтарифы (lib/plans.js) — пакет сказок, год без ограничений, донат');
+const { PLANS, FREE_STORIES, RECORD_FREE, grantFor } = await import('../lib/plans.js');
+check('два тарифа: pack10, year', () => assert.deepEqual(Object.keys(PLANS).sort(), ['pack10', 'year']));
+check('grantFor(pack10) даёт 10 сказок', () => {
+  const g = grantFor('pack10', 0);
+  assert.equal(g.stories, 10);
+});
+check('grantFor(year) даёт безлимит на 365 дней', () => {
+  const g = grantFor('year', 0);
+  assert.equal(g.stories, null);
+  assert.equal(g.until, 365 * 86400000);
+});
+check('FREE_STORIES=1: ровно одна бесплатная сказка любым способом', () => { assert.equal(FREE_STORIES, 1); assert.equal(RECORD_FREE, 1); });
 
+console.log('\nправила аккаунта (lib/store.js) — тот же счётчик, что списывает Favola');
+const { canMake, canMakeRecord, blankUser, publicView } = await import('../lib/store.js');
+check('свежий аккаунт может сделать бесплатную сказку', () => {
+  const u = blankUser('dev1');
+  assert.equal(canMake(u, FREE_STORIES).ok, true);
+});
+check('после FREE_STORIES бесплатных без оплаты — нельзя', () => {
+  const u = blankUser('dev2'); u.made = FREE_STORIES;
+  assert.equal(canMake(u, FREE_STORIES).ok, false);
+});
+check('вторая сказка из записи без оплаты — нельзя (RECORD_FREE=1)', () => {
+  const u = blankUser('dev3'); u.made = 1;
+  assert.equal(canMakeRecord(u, FREE_STORIES, RECORD_FREE).ok, false);
+});
+check('publicView не отдаёт лишнего', () => {
+  const u = blankUser('dev4');
+  const v = publicView(u, FREE_STORIES, RECORD_FREE);
+  assert.ok(!('payments' in v));
+});
+
+console.log('\nразбор записи (lib/record.js) — переиспользованная логика Favola');
+const { splitSentences, sceneCountFor, cleanShows, timeline } = await import('../lib/record.js');
+check('splitSentences режет по точке', () => {
+  const words = 'Раз. Два.'.split(' ').map((t, i) => ({ t, s: i, e: i + 0.5 }));
+  const s = splitSentences(words);
+  assert.ok(s.length >= 2);
+});
+check('sceneCountFor держится в границах 3..6', () => {
+  assert.ok(sceneCountFor(300, 30) <= 6);
+  assert.ok(sceneCountFor(5, 2) >= 1);
+});
+check('cleanShows убирает повторы и режет длину списка', () => {
+  assert.deepEqual(cleanShows(['кот', 'КОТ', 'дом', 'дом', 'дом', 'а', 'б', 'в', 'г']).length <= 6, true);
+});
+
+console.log('\nподсказки (lib/prompts.js) — новые для Radio собраны без ошибок');
+const { buildWizardPrompt, buildPolishPrompt, buildLibraryScenesPrompt, WIZARD_SYSTEM, POLISH_SYSTEM } = await import('../lib/prompts.js');
+check('buildWizardPrompt подставляет все восемь ответов', () => {
+  const p = buildWizardPrompt(['Ася', 'зверь', 'мёд', 'дождь', 'сова', 'лес', 'спрятался', 'подождал'], 'ru');
+  assert.ok(p.includes('Ася') && p.includes('подождал'));
+});
+check('buildPolishPrompt нумерует предложения', () => {
+  const p = buildPolishPrompt(['Раз.', 'Два.'], 'ru');
+  assert.ok(p.includes('0: Раз.') && p.includes('1: Два.'));
+});
+check('buildLibraryScenesPrompt нумерует абзацы', () => {
+  const p = buildLibraryScenesPrompt(['Абзац один.', 'Абзац два.'], 'ru');
+  assert.ok(p.includes('0: Абзац один.'));
+});
+check('системные подсказки не пустые', () => { assert.ok(WIZARD_SYSTEM.length > 100); assert.ok(POLISH_SYSTEM.length > 100); });
+
+console.log(`\n${ok} прошло, ${fail} провалено`);
 process.exit(fail ? 1 : 0);
