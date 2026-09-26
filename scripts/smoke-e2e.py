@@ -151,6 +151,9 @@ page.fill('#email', 'roditel@example.com'); page.click('#sendCode'); page.wait_f
 check('после отправки кода показано поле кода', page.is_visible('#codeWrap'))
 page.fill('#code', '123456'); page.click('#checkCode'); page.wait_for_timeout(400)
 check('после верного кода — развилка', cur() == 'hub', cur())
+check('на развилке видна кликабельная надпись Favola Radio', page.is_visible('.screen[data-active] .brandbar img'))
+page.click('.screen[data-active] .brandbar'); page.wait_for_timeout(150)
+check('нажатие на надпись ведёт на развилку', cur() == 'hub', cur())
 
 print('запись голосом')
 page.click('#goRecord'); page.wait_for_timeout(200)
