@@ -95,6 +95,10 @@ def api(route):
             }
             return J({'id': sid, 'файловое_хранилище': True})
         if body.get('act') == 'asset':
+            if not STATE.get('blob_ready', True):
+                # Как настоящий сервер без включённого файлового хранилища (Blob) —
+                # явная ошибка, а не тихий «ok», который на деле терял картинку/голос.
+                return J({'error': 'файловое хранилище (Blob) не подключено на сервере', 'outcome': 'no-storage'})
             rec = STORY_STORE.get(body.get('id'))
             if rec is not None:
                 name = body.get('name','')
@@ -125,7 +129,8 @@ window.MediaRecorder = FakeRecorder;
 """
 
 pw = sync_playwright().start()
-b = pw.chromium.launch(executable_path='/opt/pw-browsers/chromium', args=['--no-sandbox'])
+_exe = '/opt/pw-browsers/chromium'
+b = pw.chromium.launch(**({'executable_path': _exe} if os.path.isfile(_exe) else {}), args=['--no-sandbox'])
 ctx = b.new_context(viewport={'width':390,'height':844})
 page = ctx.new_page(); errs = []
 page.on('pageerror', lambda e: errs.append(str(e)[:200]))
@@ -202,8 +207,10 @@ for i in range(8):
     page.click('#qNext'); page.wait_for_timeout(100)
 check('после всех вопросов — закрывающая строка и кнопка сохранения', page.is_visible('#saveStory'))
 check('закрывающая строка на месте', 'спроси у того' in page.inner_text('#closingLine'))
-page.click('#saveStory'); page.wait_for_timeout(300)
+page.click('#saveStory'); page.wait_for_timeout(900)
 check('кнопка сохранения сработала без ошибок', 'Сохранено' in page.inner_text('#saveStory'))
+check('после сохранения приложение само открывает полку, а не молчит', cur() == 'shelf', cur())
+check('только что сохранённая сказка сразу видна на полке', page.locator('#shelfGrid .book').count() >= 1)
 
 print('конструктор «Придумать вместе»')
 page.click('.screen[data-active] [data-home]'); page.wait_for_timeout(200)
@@ -223,8 +230,17 @@ for i in range(5):
 check('дошли до восьмого вопроса', page.evaluate("()=>document.querySelectorAll('.wizprog i.on').length") == 8)
 page.fill('.wizstep input', 'справился'); page.wait_for_timeout(100)
 page.click('#wizNext'); page.wait_for_timeout(1200)
-check('после восьми ответов — собранная сказка', cur() == 'story', cur())
+check('после восьми ответов и рисования — телесуфлёр, чтобы прочитать вслух и записать',
+      cur() == 'telep', cur())
+check('в телесуфлёре — текст только что собранной сказки', page.inner_text('#tpText') != '')
+check('запись и тут не идёт сама — видна кнопка «Записать»',
+      page.is_visible('#tpRecordBtn') and page.is_hidden('#tpRecIndicator'))
+page.click('#tpRecordBtn'); page.wait_for_timeout(150)
+page.click('#tpFinish'); page.wait_for_timeout(1000)
+check('после записи — собранная сказка «Придумать вместе»', cur() == 'story', cur())
 check('название сказки из ответа модели', 'Проверочная' in page.inner_text('#storyTitle'))
+check('сказку «Придумать вместе» тоже можно было записать голосом — кнопка воспроизведения видна',
+      page.evaluate("()=>getComputedStyle(document.getElementById('playBtn')).visibility") == 'visible')
 
 print('полка и кабинет')
 page.click('.screen[data-active] [data-home]'); page.wait_for_timeout(200)
@@ -247,6 +263,31 @@ page.click('#goWizard'); page.wait_for_timeout(300)
 check('без права на бесплатную сказку — экран тарифов, а не конструктор', cur() == 'paywall', cur())
 check('на экране тарифов виден пакет из 10 сказок', '10' in page.inner_text('.screen[data-active]'))
 STATE['spend_ok'] = True
+
+print('сохранение, когда на сервере не включено файловое хранилище (Blob)')
+# Раньше в этом случае сервер отвечал "ok", картинка и голос никуда не сохранялись,
+# а кнопка всё равно писала «Сохранено» — человек думал, что всё получилось.
+page.click('.screen[data-active] [data-home]'); page.wait_for_timeout(150)
+STATE['blob_ready'] = False
+page.click('#goRecord'); page.wait_for_timeout(200)
+page.click('.stylecard >> nth=0'); page.wait_for_timeout(150)
+page.click('#recStart'); page.wait_for_timeout(150)
+page.click('#recStop'); page.wait_for_timeout(2000)
+check('вторая запись тоже дошла до собранной сказки', cur() == 'story', cur())
+for i in range(6):
+    if cur() == 'parent': break
+    page.click('#pgNext'); page.wait_for_timeout(120)
+check('долистали до экрана вопросов взрослому', cur() == 'parent', cur())
+for i in range(8):
+    if page.is_visible('#saveStory'): break
+    page.click('#qNext'); page.wait_for_timeout(100)
+before_shelf_click = cur()
+page.click('#saveStory'); page.wait_for_timeout(900)
+check('без файлового хранилища кнопка не врёт "Сохранено"', 'Сохранено' not in page.inner_text('#saveStory'))
+check('без файлового хранилища видна понятная ошибка, а не тишина', page.is_visible('#saveErr') and page.inner_text('#saveErr') != '')
+check('без файлового хранилища приложение не уводит на полку молча', cur() == before_shelf_click, cur())
+STATE['blob_ready'] = True
+page.click('.screen[data-active] [data-home]'); page.wait_for_timeout(150)
 
 check('за весь прогон ни одной ошибки в консоли', not errs, errs)
 

@@ -53,7 +53,7 @@ check('grantFor(year) даёт безлимит на 365 дней', () => {
 check('FREE_STORIES=1: ровно одна бесплатная сказка любым способом', () => { assert.equal(FREE_STORIES, 1); assert.equal(RECORD_FREE, 1); });
 
 console.log('\nправила аккаунта (lib/store.js) — тот же счётчик, что списывает Favola');
-const { canMake, canMakeRecord, blankUser, publicView } = await import('../lib/store.js');
+const { canMake, canMakeRecord, blankUser, publicView, linkIdentity, emailKey, saveUser } = await import('../lib/store.js');
 check('свежий аккаунт может сделать бесплатную сказку', () => {
   const u = blankUser('dev1');
   assert.equal(canMake(u, FREE_STORIES).ok, true);
@@ -71,6 +71,22 @@ check('publicView не отдаёт лишнего', () => {
   const v = publicView(u, FREE_STORIES, RECORD_FREE);
   assert.ok(!('payments' in v));
 });
+await (async () => {
+  // Главная жалоба Василия: «зашёл под своей почтой с другого устройства —
+  // а сказок нет». linkIdentity должен подтягивать radio_made (список своих
+  // сказок Radio) точно так же, как уже подтягивает shelf для Favola.
+  try {
+    const mail = emailKey('semya-' + Date.now() + '@example.com');
+    const devA = blankUser('devA-' + Date.now()); devA.radio_made = ['rd1', 'rd2'];
+    await linkIdentity(devA, mail);
+    await saveUser(devA);
+    const devB = blankUser('devB-' + Date.now());
+    await linkIdentity(devB, mail);
+    assert.ok(devB.radio_made.includes('rd1') && devB.radio_made.includes('rd2'),
+      'на новом устройстве под той же почтой нет сказок с первого: ' + JSON.stringify(devB.radio_made));
+    ok++; console.log('  ok   при входе с новой почты/устройства свои сказки Radio подтягиваются с других устройств');
+  } catch (e) { fail++; console.log('  FAIL при входе с новой почты/устройства свои сказки Radio подтягиваются с других устройств  -> ' + e.message); }
+})();
 
 console.log('\nразбор записи (lib/record.js) — переиспользованная логика Favola');
 const { splitSentences, sceneCountFor, cleanShows, timeline } = await import('../lib/record.js');
@@ -102,6 +118,115 @@ check('buildLibraryScenesPrompt нумерует абзацы', () => {
   assert.ok(p.includes('0: Абзац один.'));
 });
 check('системные подсказки не пустые', () => { assert.ok(WIZARD_SYSTEM.length > 100); assert.ok(POLISH_SYSTEM.length > 100); });
+
+console.log('\nсвои сказки (api/stories.js) — сохранение не должно молчать об ошибке');
+{
+  const storiesHandler = (await import('../api/stories.js')).default;
+  // Маленькая подмена req/res в духе Vercel: handler читает req.method/query/body
+  // и вызывает res.status(...).json(...).
+  function call(req) {
+    const res = { _status: 200, status(c){ this._status=c; return this; }, json(o){ this._body=o; return this; }, end(){ return this; }, setHeader(){ return this; } };
+    req.query = req.query || {};
+    return storiesHandler(req, res).then(() => ({ status: res._status, body: res._body }));
+  }
+  const device = 'selftest-device-' + Date.now();
+  let sid = null;
+  await (async () => {
+    try {
+      const r = await call({ method:'POST', body: { device, act:'start', story: {
+        kind:'record', title:'Т', lang:'ru', panels:['раз','два'], questions:[],
+        audio: { url: 'data:audio/webm;base64,QQ==', timeline: [], words: [], pauses: [] }
+      } } });
+      assert.equal(r.status, 200);
+      assert.ok(r.body && r.body.id, 'нет id: ' + JSON.stringify(r.body));
+      sid = r.body.id;
+      ok++; console.log('  ok   act:start заводит сказку и не пишет data:-строку голоса в опись');
+    } catch (e) { fail++; console.log('  FAIL act:start заводит сказку и не пишет data:-строку голоса в опись  -> ' + e.message); }
+  })();
+  await (async () => {
+    try {
+      assert.ok(sid, 'предыдущий шаг не завёл сказку');
+      // Без BLOB_READ_WRITE_TOKEN/BLOB_STORE_ID (как в этой песочнице) хранилище файлов
+      // не подключено — раньше act:asset тут молча отвечал «ok», а картинка терялась.
+      const r = await call({ method:'POST', body: { device, act:'asset', id: sid, name:'panel-1', data:'data:image/jpeg;base64,QQ==' } });
+      assert.ok(r.body && r.body.error, 'ожидали явную ошибку, получили: ' + JSON.stringify(r.body));
+      ok++; console.log('  ok   act:asset без файлового хранилища возвращает понятную ошибку, а не тихий "ok"');
+    } catch (e) { fail++; console.log('  FAIL act:asset без файлового хранилища возвращает понятную ошибку, а не тихий "ok"  -> ' + e.message); }
+  })();
+}
+
+console.log('\nпрямая загрузка записи в хранилище (/api/upload) и хранение оригинала');
+{
+  const rec = await import('../lib/record.js');
+  const recordHandler = (await import('../api/record.js')).default;
+  const storiesHandler = (await import('../api/stories.js')).default;
+  function mk(handler) {
+    return req => {
+      const res = { _status: 200, status(c){ this._status=c; return this; }, json(o){ this._body=o; return this; }, end(){ return this; }, setHeader(){ return this; } };
+      req.query = req.query || {};
+      return handler(req, res).then(() => ({ status: res._status, body: res._body }));
+    };
+  }
+  const callRec = mk(recordHandler), callSt = mk(storiesHandler);
+  check('путь загрузки лежит внутри radio-raw/ и не пускает чужие символы', () => {
+    const p = rec.uploadPath('../../evil dev', 'take.m4a');
+    assert.ok(p.startsWith('radio-raw/evildev/'), p);
+    assert.ok(p.endsWith('.m4a'), p);
+    assert.equal(rec.uploadPath('', 'x.webm'), null);
+    assert.ok(rec.uploadPath('d1', 'x.exe').endsWith('.webm'));
+  });
+  await (async () => {
+    const name = 'без ключа хранилища /api/upload честно говорит «no-storage»';
+    try {
+      const saved = process.env.BLOB_READ_WRITE_TOKEN; delete process.env.BLOB_READ_WRITE_TOKEN;
+      const r = await callRec({ method:'POST', query:{ __r:'upload' }, body:{ device:'d1', name:'t.webm' } });
+      if (saved) process.env.BLOB_READ_WRITE_TOKEN = saved;
+      assert.equal(r.status, 503); assert.equal(r.body.outcome, 'no-storage');
+      ok++; console.log('  ok   ' + name);
+    } catch (e) { fail++; console.log('  FAIL ' + name + '  -> ' + e.message); }
+  })();
+  await (async () => {
+    const name = 'с ключом хранилища /api/upload выдаёт пропуск на один путь';
+    try {
+      process.env.BLOB_READ_WRITE_TOKEN = 'vercel_blob_rw_teststore_secretsecretsecret';
+      const r = await callRec({ method:'POST', query:{ __r:'upload' }, body:{ device:'d1', name:'t.webm' } });
+      delete process.env.BLOB_READ_WRITE_TOKEN;
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.ok(String(r.body.clientToken).startsWith('vercel_blob_client_'), 'не пропуск: ' + r.body.clientToken);
+      assert.ok(r.body.pathname.startsWith('radio-raw/d1/'));
+      const payload = JSON.parse(Buffer.from(Buffer.from(r.body.clientToken.split('_').pop(), 'base64').toString().split('.')[1], 'base64').toString());
+      assert.equal(payload.pathname, r.body.pathname);
+      assert.equal(payload.maximumSizeInBytes, rec.MAX_UPLOAD_BYTES);
+      ok++; console.log('  ok   ' + name);
+    } catch (e) { delete process.env.BLOB_READ_WRITE_TOKEN; fail++; console.log('  FAIL ' + name + '  -> ' + e.message); }
+  })();
+  await (async () => {
+    const name = '/api/clean по ссылке берёт запись только из нашего хранилища';
+    try {
+      process.env.ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || 'test';
+      const r = await callRec({ method:'POST', query:{ __r:'clean' }, body:{ url:'https://evil.example.com/a.webm' } });
+      assert.equal(r.status, 400);
+      ok++; console.log('  ok   ' + name);
+    } catch (e) { fail++; console.log('  FAIL ' + name + '  -> ' + e.message); }
+  })();
+  await (async () => {
+    const name = 'act:start хранит исходную запись рядом с очищенной, чужие ссылки не берёт';
+    try {
+      const device = 'selftest-orig-' + Date.now();
+      const good = 'https://abc.public.blob.vercel-storage.com/radio-raw/d/x.webm';
+      const r1 = await callSt({ method:'POST', body:{ device, act:'start', story:{ kind:'record', title:'Т', lang:'ru', panels:['а'],
+        audio:{ url:'https://abc.public.blob.vercel-storage.com/records/clean.mp3', original: good, timeline:[{start:0,end:1}] } } } });
+      const g1 = await callSt({ method:'GET', query:{ device, id: r1.body.id } });
+      assert.equal(g1.body.audio.original, good);
+      assert.ok(g1.body.audio.voice);
+      const r2 = await callSt({ method:'POST', body:{ device, act:'start', story:{ kind:'record', title:'Т', lang:'ru', panels:['а'],
+        audio:{ url:'https://abc.public.blob.vercel-storage.com/records/clean.mp3', original:'https://evil.example.com/x.webm', timeline:[] } } } });
+      const g2 = await callSt({ method:'GET', query:{ device, id: r2.body.id } });
+      assert.equal(g2.body.audio.original, undefined);
+      ok++; console.log('  ok   ' + name);
+    } catch (e) { fail++; console.log('  FAIL ' + name + '  -> ' + e.message); }
+  })();
+}
 
 console.log(`\n${ok} прошло, ${fail} провалено`);
 process.exit(fail ? 1 : 0);
