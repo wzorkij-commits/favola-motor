@@ -1,13 +1,7 @@
-// Начало оплаты. Сервер создаёт платёж и возвращает ссылку на страницу SumUp.
+// Начало оплаты — тот же SumUp-продавец и те же тарифы, что в Favola,
+// потому что подписка одна на оба приложения.
 //
 //   POST /api/pay {device, plan, amount?, email?, back}
-//        plan: month | year | unlimited | support
-//        amount: только для support
-//        back: адрес, куда SumUp вернёт человека после оплаты
-//
-// Возвращает {url, ref}. Ссылку открывает браузер, дальше карта вводится
-// на стороне SumUp: своей формы для карт у нас нет и быть не должно.
-
 import { cors } from '../lib/providers.js';
 import { loadUser, saveUser } from '../lib/store.js';
 import { PLANS, DONATION, CURRENCY, priceOf } from '../lib/plans.js';
@@ -18,7 +12,6 @@ import paystatus from '../lib/h-paystatus.js';
 const okMail = m => typeof m === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(m.trim());
 
 export default async function handler(req, res) {
-  // /api/pay-status живёт здесь же
   if (asked(req) === 'pay-status') return paystatus(req, res);
 
   cors(res);
@@ -48,22 +41,20 @@ export default async function handler(req, res) {
       u.email = String(email).trim().toLowerCase();
     }
 
-    const ref = 'favola-' + device.slice(0, 12) + '-' + Date.now().toString(36);
+    const ref = 'favrad-' + device.slice(0, 12) + '-' + Date.now().toString(36);
     const title = isDonation ? DONATION.title.ru : PLANS[plan].title.ru;
 
     const co = await createCheckout({
       reference: ref,
       amount: price,
       currency: CURRENCY,
-      description: 'Favola · ' + title,
-      // приложение присылает адрес возврата с меткой {REF} — подставляем номер платежа
+      description: 'Favola Radio · ' + title,
       redirectUrl: (back && /^https?:\/\//.test(back))
         ? back.replace('{REF}', encodeURIComponent(ref))
-        : 'https://favola-vercel-1.vercel.app/app.html?paid=' + encodeURIComponent(ref),
+        : 'https://favola-radio.vercel.app/app.html?paid=' + encodeURIComponent(ref),
       email: u.email
     });
 
-    // Помним, за что платили: подтверждать будем по этой записи, а не по словам браузера.
     u.payments = (u.payments || []).filter(p => p.status !== 'PENDING' || Date.now() - p.at < 36e5);
     u.payments.push({ ref, checkout: co.id, plan, amount: price, at: Date.now(), status: 'PENDING' });
     await saveUser(u);

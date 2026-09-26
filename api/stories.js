@@ -1,19 +1,17 @@
-// Свои сказки: сохранение, список, чтение, удаление.
+// Свои сказки Radio: сохранение, список, чтение, удаление. Отдельные ключи
+// от сказок Favola (rad:story: вместо fav:story:), но один и тот же аккаунт.
 //
-//   POST /api/stories {device, act:"start", story}        — завести сказку, вернуть id
-//   POST /api/stories {device, act:"asset", id, name, data} — положить один файл
-//   POST /api/stories {device, act:"done", id}            — закрыть и добавить в кабинет
-//   POST /api/stories {device, act:"delete", id}          — удалить сказку и её файлы
-//   GET  /api/stories?device=...                          — список описей (без файлов)
-//   GET  /api/stories?device=...&id=...                   — одна сказка целиком
-//
-// Файлы идут по одному, поэтому ни один запрос не упирается в потолок.
-
+//   POST /api/stories {device, act:"start", story}          — завести сказку
+//   POST /api/stories {device, act:"asset", id, name, data} — положить файл
+//   POST /api/stories {device, act:"done", id}               — закрыть
+//   POST /api/stories {device, act:"delete", id}             — удалить
+//   GET  /api/stories?device=...                             — список описей
+//   GET  /api/stories?device=...&id=...                      — сказка целиком
 import { cors } from '../lib/providers.js';
 import { get, set, loadUser, saveUser } from '../lib/store.js';
 import { putFile, deleteFiles, fromDataUrl, BLOB_READY } from '../lib/blob.js';
 
-const key = id => 'fav:story:' + id;
+const key = id => 'rad:story:' + id;
 const MAX_PER_USER = 200;
 
 const mine = (rec, device, u) =>
@@ -38,10 +36,10 @@ export default async function handler(req, res) {
       }
 
       const list = [];
-      for (const sid of (u.stories_made || []).slice(-MAX_PER_USER).reverse()) {
+      for (const sid of (u.radio_made || []).slice(-MAX_PER_USER).reverse()) {
         const rec = await get(key(sid));
         if (!rec) continue;
-        list.push({ id: rec.id, title: rec.title, hero: rec.hero, lang: rec.lang,
+        list.push({ id: rec.id, title: rec.title, kind: rec.kind, lang: rec.lang,
                     at: rec.at, cover: (rec.art || [])[0] || null, done: !!rec.done });
       }
       return res.status(200).json({ stories: list, файловое_хранилище: BLOB_READY() });
@@ -55,17 +53,21 @@ export default async function handler(req, res) {
 
     if (act === 'start') {
       if (!story || !Array.isArray(story.panels)) return res.status(400).json({ error: 'нет сказки' });
-      const sid = 'st' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      const sid = 'rd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       const rec = {
         id: sid, device, google: u.google || null, email: u.email || null,
         at: Date.now(), done: false,
-        title: story.title || '', hero: story.hero || '', lang: story.lang || 'ru',
+        // kind: 'record' | 'library' | 'wizard' — откуда взялась сказка, для полки
+        kind: story.kind || 'wizard',
+        title: story.title || '', lang: story.lang || 'ru',
         panels: story.panels, questions: story.questions || [],
-        request: story.request || '', meta: story.meta || null,
-        art: [], audio: {}
+        // audio.url — уже готовая ссылка на файл (чистка звука сама кладёт его в хранилище
+        // при записи); timeline — на какой секунде начинается/кончается каждая страница.
+        meta: story.meta || (story.audio && story.audio.timeline ? { audioTimeline: story.audio.timeline } : null),
+        art: [], audio: (story.audio && story.audio.url) ? { voice: story.audio.url } : {}
       };
       await set(key(sid), rec);
-      u.stories_made = [...(u.stories_made || []), sid].slice(-MAX_PER_USER);
+      u.radio_made = [...(u.radio_made || []), sid].slice(-MAX_PER_USER);
       await saveUser(u);
       return res.status(200).json({ id: sid, файловое_хранилище: BLOB_READY() });
     }
@@ -78,7 +80,7 @@ export default async function handler(req, res) {
       try { file = fromDataUrl(data); }
       catch (e) { return res.status(400).json({ error: String(e.message) }); }
 
-      const url = await putFile(`stories/${id}/${name}.${file.ext}`, file.buffer, file.type);
+      const url = await putFile(`radio-stories/${id}/${name}.${file.ext}`, file.buffer, file.type);
       if (/^panel-\d+$/.test(name) && file.type.startsWith('image/')) {
         const n = parseInt(name.split('-')[1], 10) - 1;
         rec.art[n] = url;
@@ -102,7 +104,7 @@ export default async function handler(req, res) {
       if (!mine(rec, device, u)) return res.status(404).json({ error: 'не найдено' });
       await deleteFiles([...(rec.art || []).filter(Boolean), ...Object.values(rec.audio || {})]);
       await set(key(id), null);
-      u.stories_made = (u.stories_made || []).filter(x => x !== id);
+      u.radio_made = (u.radio_made || []).filter(x => x !== id);
       await saveUser(u);
       return res.status(200).json({ ok: true });
     }
