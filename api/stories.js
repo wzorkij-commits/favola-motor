@@ -10,6 +10,7 @@
 import { cors } from '../lib/providers.js';
 import { get, set, loadUser, saveUser } from '../lib/store.js';
 import { putFile, deleteFiles, fromDataUrl, BLOB_READY } from '../lib/blob.js';
+import { isBlobUrl } from '../lib/record.js';
 
 const key = id => 'rad:story:' + id;
 const MAX_PER_USER = 200;
@@ -70,8 +71,23 @@ export default async function handler(req, res) {
           audioWords: story.audio.words || [],
           audioPauses: story.audio.pauses || []
         } : null),
-        art: [], audio: (story.audio && story.audio.url) ? { voice: story.audio.url } : {}
+        // audio.url кладём в опись, только если это уже настоящая ссылка на файл.
+        // Строку data:... (запись, которую не успели положить в хранилище) сюда
+        // не пишем — она весит мегабайты и не должна лежать в описи целиком;
+        // такую запись клиент отдельно проведёт через act:"asset".
+        art: [], audio: (story.audio && story.audio.url && !String(story.audio.url).startsWith('data:'))
+          ? { voice: story.audio.url } : {}
       };
+      // Исходная запись, как её снял телефон, до очистки от шума. Её не проигрываем,
+      // но храним навсегда: это настоящий голос, если очистка его хоть чуть испортила.
+      // Берём только ссылку из нашего же хранилища.
+      if (story.audio && isBlobUrl(story.audio.original)) rec.audio.original = story.audio.original;
+      // Картинки, у которых уже есть постоянная ссылка (готовая библиотека кэширует
+      // свои иллюстрации в хранилище), кладём сразу. Раньше их пытались отправить
+      // через act:"asset" как файл, сервер отвечал ошибкой, и сохранение сказки
+      // из библиотеки при работающем хранилище срывалось.
+      if (Array.isArray(story.art)) story.art.forEach((u, i) => { if (isBlobUrl(u)) rec.art[i] = u; });
+      if (story.audio && story.audio.cleaned === false && rec.meta) rec.meta.notCleaned = true;
       await set(key(sid), rec);
       u.radio_made = [...(u.radio_made || []), sid].slice(-MAX_PER_USER);
       await saveUser(u);
@@ -81,7 +97,10 @@ export default async function handler(req, res) {
     if (act === 'asset') {
       const rec = await get(key(id));
       if (!mine(rec, device, u)) return res.status(404).json({ error: 'не найдено' });
-      if (!BLOB_READY()) return res.status(200).json({ outcome: 'no-storage' });
+      // Раньше это молча отвечало "ok", а картинка или голос никуда не сохранялись —
+      // человек видел «Сохранено» и терял запись. Теперь — явная ошибка, чтобы
+      // приложение не врало, что всё получилось.
+      if (!BLOB_READY()) return res.status(200).json({ error: 'файловое хранилище (Blob) не подключено на сервере', outcome: 'no-storage' });
       let file;
       try { file = fromDataUrl(data); }
       catch (e) { return res.status(400).json({ error: String(e.message) }); }
