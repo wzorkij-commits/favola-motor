@@ -51,7 +51,9 @@ export default async function handler(req, res) {
       description: 'Favola Radio · ' + title,
       redirectUrl: (back && /^https?:\/\//.test(back))
         ? back.replace('{REF}', encodeURIComponent(ref))
-        : 'https://favola-radio.vercel.app/app.html?paid=' + encodeURIComponent(ref),
+        // запасной адрес — только если сайт не прислал свой: ведёт на сам сайт
+        // приложения, а не на голый адрес мотора (там нет страниц).
+        : 'https://favola-radio-1.vercel.app/app.html?paid=' + encodeURIComponent(ref),
       email: u.email
     });
 

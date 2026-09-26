@@ -62,8 +62,14 @@ export default async function handler(req, res) {
         title: story.title || '', lang: story.lang || 'ru',
         panels: story.panels, questions: story.questions || [],
         // audio.url — уже готовая ссылка на файл (чистка звука сама кладёт его в хранилище
-        // при записи); timeline — на какой секунде начинается/кончается каждая страница.
-        meta: story.meta || (story.audio && story.audio.timeline ? { audioTimeline: story.audio.timeline } : null),
+        // при записи); timeline — на какой секунде начинается/кончается каждая страница;
+        // words — слова с таймингом внутри каждой страницы (постепенное появление текста
+        // в такт голосу); pauses — долгие паузы внутри записи (тихо промотать при прослушивании).
+        meta: story.meta || (story.audio && story.audio.timeline ? {
+          audioTimeline: story.audio.timeline,
+          audioWords: story.audio.words || [],
+          audioPauses: story.audio.pauses || []
+        } : null),
         art: [], audio: (story.audio && story.audio.url) ? { voice: story.audio.url } : {}
       };
       await set(key(sid), rec);

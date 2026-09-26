@@ -69,7 +69,18 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const { id, lang } = req.query || {};
-      if (!id) return res.status(200).json({ stories: libraryList(lang) });
+      if (!id) {
+        // Обложка — картинка первой сцены, если её уже когда-нибудь рисовали
+        // (план кэшируется навсегда). Ничего заново не рисуем на списке —
+        // это было бы слишком медленно; просто читаем, что уже есть.
+        const list = libraryList(lang);
+        const withCovers = await Promise.all(list.map(async s => {
+          const cached = await get(planKey(s.id));
+          const cover = (cached && cached.scenes && cached.scenes[0] && cached.scenes[0].image) || null;
+          return { ...s, cover };
+        }));
+        return res.status(200).json({ stories: withCovers });
+      }
 
       const story = libraryOne(id);
       if (!story) return res.status(404).json({ error: 'сказка не найдена' });

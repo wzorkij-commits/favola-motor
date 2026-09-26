@@ -40,7 +40,7 @@ export default async function handler(req, res) {
               .filter(c => c.name && c.look),
             world: clip(j.world, 220),
             scenes: scenes.slice(0, 6).map(s => ({ brief: clip(s && s.brief, 400), shows: Array.isArray(s && s.shows) ? s.shows.slice(0, 6) : [] })),
-            questions: (Array.isArray(j.questions) ? j.questions : []).slice(0, 3).map(q => clip(q, 200)).filter(Boolean)
+            questions: (Array.isArray(j.questions) ? j.questions : []).slice(0, 6).map(q => clip(q, 200)).filter(Boolean)
           };
         } else why = 'в ответе меньше трёх частей';
       } catch (e) { why = String(e.message || e); }
@@ -59,8 +59,10 @@ export default async function handler(req, res) {
         world: clean[5],
         scenes: clean.map(a => ({ brief: `A picture-book illustration: ${a}`, shows: [] })),
         questions: lang === 'en'
-          ? ['What do you think the hero felt?', 'What would you have done?', 'What happens next, do you think?']
-          : ['Что, как ты думаешь, чувствовал герой?', 'А что бы сделал ты?', 'Как думаешь, что было дальше?'],
+          ? ['What do you think the hero felt?', 'What would you have done?', 'What happens next, do you think?',
+             'Which part would you draw if you could?', 'Who would you want as a friend in this story?']
+          : ['Что, как ты думаешь, чувствовал герой?', 'А что бы сделал ты?', 'Как думаешь, что было дальше?',
+             'Какую часть ты бы нарисовал, если бы мог?', 'С кем из этой истории ты хотел бы дружить?'],
         source: 'fallback', why
       };
     }

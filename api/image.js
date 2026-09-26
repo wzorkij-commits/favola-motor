@@ -12,10 +12,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   try {
-    const { brief, cast, heroRef, world, shows, fix, panel } = req.body || {};
+    const { brief, cast, heroRef, world, shows, fix, panel, style } = req.body || {};
     if (!brief) return res.status(400).json({ error: 'brief required' });
     const refs = heroRef ? [heroRef] : [];
-    const prompt = buildSceneImagePrompt(brief, cast, refs.length > 0, { world, shows, fix });
+    const prompt = buildSceneImagePrompt(brief, cast, refs.length > 0, { world, shows, fix, style });
     const dataUrl = await generateImage(prompt, refs);
     return res.status(200).json({ panel, image: dataUrl });
   } catch (e) {
